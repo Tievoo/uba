@@ -6,3 +6,5 @@ Después de leer foros, llegué a una conclusión parecida a esto:
 
 Asumiendo que P = SPACE(n), implica que existe un problema que toma espacio $O(n)$ y tiempo $O(n^c)$ para una $c$ constante. Entonces, también dicta que P = SPACE(n^2), ya que existira un problema con tiempo $O(n^{2c})$ con espacio $O(n^2)$ entonces SPACE(n) = SPACE(n^2) ! Lo que rompe la jerarquía de espacios.
 
+También diría que podes usar un contraejemplo? As in segurisimo que hay un problema exponencial que usa espacio lineal, tipo TQBF, que es definitivamente exponencial, pero está en espacio lineal
+
