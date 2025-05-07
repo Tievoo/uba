@@ -28,4 +28,14 @@ es lo mismo q el de arriba pero el k viene codificado, mismo conceptito
 
 Hecho en clase, el certificado son los coloreos (f: nodo -> color)
 
-### Me da paja seguir
+### e) ISOMORPHISM
+
+Certificado: un f que convierte un vertice de G en uno de H (biyeccion)
+
+### f) SUBGRAPH ISOMORPHISM
+
+Certificado: lo mismo
+
+### g) $\neg$SAT
+
+Certificado: La valuación
