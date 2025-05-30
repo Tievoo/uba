@@ -15,6 +15,6 @@ Entonces es aprox O(2k) el espacio
 
 ### c) TA-TE-TI = {$\langle T, k\rangle$ : T es una matriz con entradas de valor 0, 1 y 2 tal que el jugador 1 tiene una estrategia ganadora.}
 
-Bueno esto es en resolución es parecido al GEOGRAPHY que vimos en clase, en el sentido que el concepto de "estrategia ganadora" implica que para todo movimiento de 2 existe un movimiento de 1 que para todo movimiento de 2 existe un etc... hasta maximo k veces.
+Bueno esto es en resolución es parecido al GEOGRAPHY que vimos en clase, en el sentido que el concepto de "estrategia ganadora" implica que para todo movimiento de 2 existe un movimiento de 1 que para todo movimiento de 2 existe un etc... hasta maximo k veces. Se puede encontrar un paralelismo con TQBF
 
 Podemos haer un Backtracking guardando el estado de la matriz, que toma k x k o lo que es lo mismo, $O(|T|)$. Para demostrar la estrategia ganadora, se tiene que hacer un and grande en las salidas de las ramas, para demostrar que, desde el estado inicial del tablero T, hay una jugada que si o si hace ganar a 1. Como tomamos O(|T|) espacio a lo sumo, es polinomial sobre el tamaño de entrada, y esta en PSPACE.
