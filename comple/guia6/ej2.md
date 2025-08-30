@@ -11,4 +11,4 @@ Sale por inducción sobre el sub, es decir
 $\Sigma^p_{k+n}$. n = 0 es trivial, el paso inductivo consiste en ver que 
 $\Sigma^p_{k+n} = \Sigma^p_{k+n+1}$. Usemos palabras, que carajo significa esto? significa que agrego un cuantificador más al final. en el n+1.
 
-Como $\Sigma^p_{k+n} = \Sigma^p_{k}$ y tambien $\Sigma^p_{k} = \Pi^p_{k}$, puedo simplementer buscar un "complemento" válido para cambiar el orden de los $k+n$ cuantificadores y combinar el último. Entonces todos los sigma son iguales y PH por consiguiente es igual a ellos. Medio cruda esta prueba, le falta un poco de horno, pero se entiende.
+Como $\Sigma^p_{k+n} = \Sigma^p_{k}$ y tambien $\Sigma^p_{k} = \Pi^p_{k}$, puedo simplementer buscar un "complemento" válido para cambiar el orden de los $k+n$ cuantificadores y combinar el último.

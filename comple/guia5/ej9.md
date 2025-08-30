@@ -1,0 +1,2 @@
+## Ejercicio 9
+Bueno, que $x \in L$ significa que tenemos que poder computar un problema de decision en espacio logaritmico. Podes hacer un algoritmo (aunque recordemos que ya no vale la tesis fuerte de church turing), en el que vas contando la cantida de parentesis de apertura y los de cierre. Si en algun momento el numero es negativo (ej: ())( haria 1 0 -1 0),es falso. Si al final,el numero es 0, es verdadero. Solo guardamos un numero (y supongo que el largo de la entrada, que es logaritmico).

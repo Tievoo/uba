@@ -4,7 +4,7 @@ En resumidas cuentas, decir esto es parecido a decir que lo hicimos antes. Recor
 $$
 \text{SAT} \leq_p \overline{\text{SAT}}
 $$
-Significa que existe un $f$ tal que $\phi \in \text{SAT} \iff f(\phi) \in \overline{\text{SAT}}$. O sea que si a $\phi$ la pasas por una función mágica y era satisfactible, ahora no lo es. Es decir, SAT complemento es NP-hard, entonces coNP es más dificl que NP! Por consiguiente, $NP \subseteq coNP$? Eh por que? Acordate que si un lenguaje es NP-hard, todos los lenguajes de NP se pueden convertir a él, entonces NP está metido en co-NP. entonces, NP = coNP
+Significa que existe un $f$ tal que $\phi \in \text{SAT} \iff f(\phi) \in \overline{\text{SAT}}$. O sea que si a $\phi$ la pasas por una función mágica y era satisfactible, ahora no lo es. Es decir, SAT complemento es NP-hard, entonces coNP es más dificl que NP! Por consiguiente, $NP \subseteq coNP$
 
 Y la vuelta? esto ya lo probamos mil veces pero sabiendo lo de arriba sale esto. Te juro, creeme.
 
