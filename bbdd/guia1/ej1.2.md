@@ -6,7 +6,7 @@ Una empresa vende productos a varios clientes. Se precisa conocer los datos pers
 
 **NOTA**: Me olvide de poner participación, así qe no asumas q no todo es participación total! Tanto cliente como producto pueden no participar de la compra
 
-![alt text](fotos/ej1.2.png)
+![alt text](img/ej1.2.png)
 
 ### Pasaje a MR
 

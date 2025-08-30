@@ -3,7 +3,7 @@
 Considere una base de datos que registra los resultados obtenidos por los estudiantes en diferentes exámenes de diferentes cursos realizados.
 ### (a) Construya el DER y MR suponiendo que Examen es una entidad y utilizando relaciones ternarias.
 
-![alt text](fotos/ej1.4.a.png)
+![alt text](img/ej1.4.a.png)
 
 #### Pasaje a MR
 

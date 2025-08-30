@@ -7,7 +7,7 @@ De las provincias a las que llegan los paquetes interesa guardar el código de p
 De los camiones que llevan los camioneros, interesa conocer la matrícula, modelo,
 tipo y potencia. Un camionero puede conducir diferentes camiones en fechas diferentes, y un camión puede ser conducido por varios camioneros.
 
-![alt text](fotos/ej1.3.png)
+![alt text](img/ej1.3.png)
 
 
 ### Pasaje a MR
