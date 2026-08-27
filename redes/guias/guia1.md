@@ -46,3 +46,29 @@ Si $N$ no es potencia de 2, armás el Huffman a ojo y contás cuántos símbolos
 
   Para $L(C)$: si $N$ es potencia de 2, $L(C) = \log_2(N)$.
   Si no, con $k = \lfloor \log_2 N \rfloor$ y $m = N - 2^k$ (los símbolos "que sobran"), quedan $2m$ símbolos de largo $k+1$ y $2^k - m$ símbolos de largo $k$.
+
+## Ejercicio 4
+
+### 1.
+
+No, a ojo. No es equiprobable porque $b_1, \dots, b_m$ tienen probabilidad $1/32$ de salir, y los $a$ tienen $1/16$.
+
+### 2.
+
+No, tampoco. Tienen la misma cantidad de símbolos en cada lado, pero las probabilidades generales no son equitativas.
+
+### 3.
+
+Tampoco. No me dan las cuentas, pero cada símbolo de $a$ tiene probabilidad $1/32$ y cada símbolo de $b$ tiene $3/64$ (creo).
+
+### 4.
+
+Este, finalmente, sí. La probabilidad para cualquier componente de $A$ es $2/96$, es decir, $1/48$, y la de $b$ también es $1/48$.
+
+## Ejercicio 5, 6
+
+Hecho en clase.
+
+## Ejercicio 7
+
+Todo.
