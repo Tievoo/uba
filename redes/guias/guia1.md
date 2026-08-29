@@ -124,3 +124,19 @@ El tiempo mínimo es, entonces, aproximadamente **2,817 segundos**.
 
 ## Ejercicio 8, 9, 10 
 hechos en clase
+
+## Ejercicio 11
+
+### a)
+Primero calculemos la cantidad de datos reales por frame. Es stop and wait, de largo fijo, pero lleva un CRC de 16 bits. y un SEQ de u bit (no lo dice pero lo asumo por ser Stop and Wait). entonces tenemos 17 bits menos de valor real. nos quedan 1983 bits "verdaderos". Como mandamos 20Mb de data, son 10086 frames.
+Delay es 0.25s, entonces, cada frame tiene que tener tambien su ACK, y asumiendo que no hay errores por consiguiente nada se retransmite, estmaos hablando de 20172 frames con ACKs incluidos. si tomamos 0.25s por frame, son unos 84 minutos 
+
+### b)
+No tengo forma clara de hacer esta cuenta? Me dijeron que Delay (T_tx + T_prop es 0.25s). Igualmente, podemos hacer la cuenta en base a cuanto es t_tx antes y cuanto es ahora. T_tx para 2kb son 0.002 segundos. con un delay de 0.25, eso nos dejaba en un t_prop de 0.248. ahora, T_tx es 2 us, asi que el delay pasaria a ser tipo 0.248. vagamente cambia, pasa de unos 84.05 min a 83.7 ish. 
+
+### c)
+con 0.1 de delay seria 20172*0.1, es decir, 2017.2s, vease 33.61. con ese delay tuviste que bajar el T_prop bastaaante. 
+
+## Ejercicio 12
+
+hecho en clase
