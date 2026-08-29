@@ -2,7 +2,7 @@
 
 *Redes de Comunicaciones y Cómputo Distribuido — FCEN, UBA*
 
-hecha por mí, formateada por mi brother Sonnet 
+hecha por mí, formateada por mi brother Sonnet o Luna o quien me re pinte
 
 ## Ejercicio 1
 
@@ -71,4 +71,56 @@ Hecho en clase.
 
 ## Ejercicio 7
 
-Todo.
+### a)
+
+La velocidad de transmisión es $V_{tx}=100$ Mbps, por lo que el tiempo de
+transmisión de un bit es:
+
+$$T_{tx}(1)=\frac{1}{100\cdot10^6}=10\ \text{ns}$$
+
+El tiempo de propagación es:
+
+$$T_{prop}=\frac{D}{V_{prop}}=\frac{385000\ \text{km}}{300000\ \text{km/s}}
+\approx 1.2833\ \text{s}$$
+
+Por lo tanto:
+
+$$Delay(1)=T_{tx}(1)+T_{prop}\approx 1.2833\ \text{s}$$
+
+$$RTT=2\cdot Delay(1)\approx 2.5667\ \text{s}$$
+
+### b)
+
+La capacidad de volumen es:
+
+$$C_{vol}=Delay(1)\cdot V_{tx}$$
+
+$$C_{vol}\approx 1.2833\cdot100\cdot10^6
+\approx 128.33\ \text{Mbit}$$
+
+Es decir, entran aproximadamente **128,33 millones de bits** simultáneamente
+en el canal.
+
+### c)
+
+El tiempo de transmisión del pedido de 2 kbit es:
+
+$$T_{tx,pedido}=\frac{2000}{100\cdot10^6}=20\ \mu\text{s}$$
+
+El tiempo de transmisión de la imagen de 25 Mbit es:
+
+$$T_{tx,imagen}=\frac{25\cdot10^6}{100\cdot10^6}=0.25\ \text{s}$$
+
+Desde que se inicia el pedido hasta que termina de recibirse la imagen
+transcurren:
+
+$$T=T_{tx,pedido}+T_{prop}+T_{tx,imagen}+T_{prop}$$
+
+$$T\approx0.00002+1.2833+0.25+1.2833
+\approx 2.8167\ \text{s}$$
+
+El tiempo mínimo es, entonces, aproximadamente **2,817 segundos**.
+
+
+## Ejercicio 8, 9, 10 
+hechos en clase
