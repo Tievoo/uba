@@ -127,16 +127,150 @@ hechos en clase
 
 ## Ejercicio 11
 
+*Convención (ver diapo "Recordatorio" de ptoapto.pdf): el "delay" dado en el enunciado (0.25 s) es $T_{prop}$, no $Delay(Frame)$ — salvo que se diga lo contrario. $Delay(Frame) = T_{tx}(Frame) + T_{prop}$ y $RTT(Frame) = 2\cdot Delay(Frame)$.*
+
+Datos reales por frame: es Stop & Wait de largo fijo, con CRC de 16 bits. Para distinguir 2 frames consecutivos ($SWS=RWS=1$, $\#frames \ge 2$) alcanza con **1 bit de SEQ**. Entonces:
+
+$$|Datos| = 2000 - 16 - 1 = 1983\ \text{bits}$$
+
+Para mandar 20 Mbit de datos:
+
+$$\#frames = \left\lceil\frac{20\cdot10^6}{1983}\right\rceil = 10086\ \text{frames}$$
+
 ### a)
-Primero calculemos la cantidad de datos reales por frame. Es stop and wait, de largo fijo, pero lleva un CRC de 16 bits. y un SEQ de u bit (no lo dice pero lo asumo por ser Stop and Wait). entonces tenemos 17 bits menos de valor real. nos quedan 1983 bits "verdaderos". Como mandamos 20Mb de data, son 10086 frames.
-Delay es 0.25s, entonces, cada frame tiene que tener tambien su ACK, y asumiendo que no hay errores por consiguiente nada se retransmite, estmaos hablando de 20172 frames con ACKs incluidos. si tomamos 0.25s por frame, son unos 84 minutos 
+
+$$T_{tx}(Frame) = \frac{2000}{1\cdot10^6} = 2\ \text{ms}$$
+
+$$Delay(Frame) = T_{tx}(Frame) + T_{prop} = 0.002 + 0.25 = 0.252\ \text{s}$$
+
+$$RTT(Frame) = 2\cdot Delay(Frame) = 0.504\ \text{s}$$
+
+Como es Stop & Wait, cada frame necesita su ciclo completo de ida y vuelta antes de mandar el siguiente:
+
+$$T_{total} = 10086 \cdot 0.504 \approx 5083.3\ \text{s} \approx \mathbf{84.7\ minutos}$$
 
 ### b)
-No tengo forma clara de hacer esta cuenta? Me dijeron que Delay (T_tx + T_prop es 0.25s). Igualmente, podemos hacer la cuenta en base a cuanto es t_tx antes y cuanto es ahora. T_tx para 2kb son 0.002 segundos. con un delay de 0.25, eso nos dejaba en un t_prop de 0.248. ahora, T_tx es 2 us, asi que el delay pasaria a ser tipo 0.248. vagamente cambia, pasa de unos 84.05 min a 83.7 ish. 
+
+Mismo delay (0.25 s), ahora con $V_{tx}=1$ Gbps:
+
+$$T_{tx}(Frame) = \frac{2000}{1\cdot10^9} = 2\ \mu\text{s}$$
+
+$$Delay(Frame) = 0.000002 + 0.25 = 0.250002\ \text{s} \qquad RTT(Frame) \approx 0.500004\ \text{s}$$
+
+$$T_{total} = 10086 \cdot 0.500004 \approx 5043.0\ \text{s} \approx \mathbf{84.05\ minutos}$$
+
+Casi no cambia respecto de (a): al ser $T_{prop}$ tan dominante frente a $T_{tx}$, aumentar 1000x la velocidad de transmisión apenas mejora el tiempo total.
 
 ### c)
-con 0.1 de delay seria 20172*0.1, es decir, 2017.2s, vease 33.61. con ese delay tuviste que bajar el T_prop bastaaante. 
+
+Mismo $V_{tx}=1$ Mbps, ahora con delay $=0.1$ s ($T_{prop}=0.1$ s):
+
+$$Delay(Frame) = 0.002 + 0.1 = 0.102\ \text{s} \qquad RTT(Frame) = 0.204\ \text{s}$$
+
+$$T_{total} = 10086 \cdot 0.204 \approx 2057.5\ \text{s} \approx \mathbf{34.3\ minutos}$$
+
+Acá sí baja bastante más, porque ahora $T_{tx}$ representa una fracción mayor de $T_{prop}$ y el $RTT$ se achica en serio (de 0.504s a 0.204s).
 
 ## Ejercicio 12
 
-hecho en clase
+*Misma convención que en el Ejercicio 11: delay dado (0.25 s) $= T_{prop}$.*
+
+### a)
+
+Usamos GoBackN, así que $RWS=1$ siempre. $SWS = V_{tx}\cdot RTT(Frame)/|Frame|$, con $RTT(Frame)=2\cdot Delay(Frame)$ (no alcanza con usar $Delay(Frame)$ solo, hay que duplicarlo).
+
+$$Delay(Frame) = T_{tx}(Frame) + T_{prop} = 0.002 + 0.25 = 0.252\ \text{s}$$
+
+$$RTT(Frame) = 2\cdot 0.252 = 0.504\ \text{s}$$
+
+$$SWS = \frac{1\cdot10^6 \cdot 0.504}{2000} = 252 \qquad RWS = 1$$
+
+### b)
+
+$$\#frames \ge SWS + RWS = 253$$
+
+$$\#SEQ = \lceil \log_2(253) \rceil = \lceil 7.98 \rceil = \mathbf{8\ bits}$$
+
+### c)
+
+Datos reales por frame: $2000 - 8\ (\#SEQ) - 16\ (CRC) = 1976$ bits.
+
+$$\#frames = \left\lceil\frac{20\cdot10^6}{1976}\right\rceil = 10122\ \text{frames}$$
+
+Como $SWS$ está óptimamente dimensionado, el emisor mantiene el canal siempre ocupado sin frenar a esperar ACKs (a diferencia de Stop & Wait). Entonces el tiempo total no es "frames × delay por frame", sino simplemente el tiempo de transmitir todos los bits (con overhead incluido) más un único $T_{prop}$ final:
+
+$$T_{total} = \frac{|Frame|\cdot\#frames}{V_{tx}} + T_{prop} = \frac{2000\cdot10122}{1\cdot10^6} + 0.25 = 20.244 + 0.25 \approx \mathbf{20.5\ segundos}$$
+
+Tiene sentido que sea órdenes de magnitud más rápido que el Stop & Wait del Ejercicio 11 (~85 min): esa es justamente la ventaja de la ventana deslizante, mantener el caño lleno en vez de esperar el RTT completo por cada frame.
+
+## Ejercicio 13
+
+### a)
+
+La eficiencia digamos
+
+$$e(|Frame|) = \frac{|Datos|}{|Frame|}$$
+$$|Datos| = |Frame| - CRC/Checksum/Whatever\ (c) - \#SEQ$$
+
+como la función es en base al tamaño del frame, tomo CRC, Checksum y demas como una constante C. 
+llamo, por conveniencia, LF al tamaño del frame. entonces
+
+$$e(LF) = \frac{LF - C - \#SEQ}{LF}$$
+
+#SEQ igual tambien se calcula en base a LF, asi que podemos expandir más la ecuación.
+
+#SEQ es ceil del log2 de sws + rws. en este caso es Selective ack asi que RWS y SWS son iguales. SWS sería V_tx * RTT(Frame) / |Frame|
+
+V_tx y Delay son consideradas constantes segun la conigna, entonces no me joden mucho. El T_tx es |Frame|/V_tx que es constante asi q entra bien en la ecuacion. con eso, RTT = 2 * Delay(f) = 2 * (|Frame|/V_tx + D (constante))
+
+Dando toda la vuelta, 
+$$ SWS(LF) = \frac{V_{tx} \:\cdot\: 2\cdot(LF/V_{tx} + D )}{LF} $$
+Vease
+$$  SWS(LF) = \frac{2\cdot(LF + D \: \cdot \: V_{tx})}{LF} $$
+
+Entonces de ahí
+
+$$ \#SEQ = \lceil \log_{2}{(SWS  + RWS)} \rceil $$
+$$ \#SEQ = \lceil \log_{2}{(2 \: \cdot \: \frac{2\cdot(LF + D \: \cdot \: V_{tx})}{LF})} \rceil = \lceil \log_{2}{(\frac{4\cdot(LF + D \: \cdot \: V_{tx})}{LF})} \rceil $$
+
+Entonces la función, completa, queda
+
+$$e(LF) = \frac{LF - C - \lceil \log_{2}{(\frac{4\cdot(LF + D \: \cdot \: V_{tx})}{LF})} \rceil}{LF}$$
+
+Creo!
+
+### b)
+
+imaginate que lo grafique. 
+
+## Ejercicio 14
+
+Bajemos variables:
+
+$$|Frame| = 1\ \text{kbit} \qquad T_{prop} = 270\ \text{ms} \qquad V_{tx} = 1\ \text{Mbps}$$
+
+tengo que ver $SWS = 7, 127, y\ 255$.
+
+Ack selectivo significa que $RWS = SWS$.
+
+$$T_{tx} = \frac{1000}{1\cdot10^6} = 0.001\ \text{s} = 1\ \text{ms}$$
+
+Quiero calcular eficiencia de protocolo. Segun las slides eso se da por 
+
+$$ E = \frac{T_{tx}(V)}{RTT(F)} $$
+
+en todos estos casos, sabemos ya el T_tx asi que queda fijo en 0.001s.
+Para el RTT, necesitamos $2\cdot(T_{prop} + 0.001\text{s})$.
+$T_{prop}$ es 270ms, vease 0.270, asi que el rtt es
+
+$$RTT(F) = 2\cdot 0.271 = 0.542\ \text{s}$$
+
+Y en que carajo nos afecta el SWS aca? que $T_{tx}(V)$ es el tiempo de transmisión de una ventana, es decir de #SWS frames. Para 7 frames, una ventana son 0.007s
+lo mismo con cada uno. Las cuentas quedan
+
+$$E_{SWS=7} = \frac{0.007}{0.542} \approx 0.0129 \Rightarrow \mathbf{1.29\%}$$
+
+$$E_{SWS=127} = \frac{0.127}{0.542} \approx 0.2343 \Rightarrow \mathbf{23.43\%}$$
+
+$$E_{SWS=255} = \frac{0.255}{0.542} \approx 0.4705 \Rightarrow \mathbf{47.05\%}$$
+respectivamente.
