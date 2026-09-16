@@ -1,41 +1,33 @@
-// Zorros grises de Saldungaray, parte 1 (ghostbusters).
-
-// Leyendo a ojimetro: a nivel código lo único que diferencia a un auto del otro, es un int, que define si va en dirección 1 o dirección 0.
-// Necesitamos una pieza de código que sea weakly fair, es decir, la idea es que no se acumulen todos los autos de una dirección cruzando
-
-
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadLocalRandom;
 
 public class CaminoUnaVia {
+    static int A = 0, B = 1;
     static int NUM_CARS = 12;
 
-    public Semaphore[]   mutex = {new Semaphore(1), new Semaphore(1)};
-    public Semaphore   ruta = new Semaphore(1);
-    public Semaphore   turnstile = new Semaphore(1);
-    public int[] count = {0, 0};
+    private Semaphore turnstile = new Semaphore(1);
+    private Semaphore resource = new Semaphore(1);
+    private Semaphore[] countMutex = { new Semaphore(1), new Semaphore(1) };
+    private int[] count = new int[2];
 
     public void entrar(int direction) throws InterruptedException {
         turnstile.acquire();
-        mutex[direction].acquire();
+        countMutex[direction].acquire();
         count[direction]++;
         if (count[direction] == 1) {
-            ruta.acquire();
+            resource.acquire();
         }
-        mutex[direction].release();
+        countMutex[direction].release();
         turnstile.release();
     }
 
     public void salir(int direction) throws InterruptedException {
-        // Conceptualmente un punto de aviso
-        mutex[direction].acquire();
-        // salimo. somos el último de los nuestros?
+        countMutex[direction].acquire();
         count[direction]--;
         if (count[direction] == 0) {
-            // somos últimos. 
-            ruta.release();
+            resource.release();
         }
-        mutex[direction].release();
+        countMutex[direction].release();
     }
 
     // Simula el tiempo que tarda un auto en cruzar el desvio.
@@ -67,8 +59,4 @@ public class CaminoUnaVia {
         for (Thread t : cars) t.start();
         for (Thread t : cars) t.join();
     }
-
-    
 }
-
-// hay N autos, 
