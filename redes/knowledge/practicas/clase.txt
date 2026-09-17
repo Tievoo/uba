@@ -1,0 +1,45 @@
+En la clase resolvimos parcialmente los ejercicios 4 y 7 de la guía.
+
+Usamos un simulador interactivo [1] para comprobar que el estado de los puertos
+que resolvimos en el pizarrón estaba bien hecho. Este simulador está bueno para
+practicar mientras se hacen ejercicios de la guía, y también para aprender
+cosas de STP (si bien menciona varias cosas que menciona están por afuera del
+alcance de la materia).
+
+Para simular el ejercicio 4 usamos el siguiente código:
+    :protocol stp
+    S1001 @1,0, prio=1 icon=🌳
+    S1002 @0,1, prio=2
+    S1005 @2,1, prio=5
+    S1003 @0,2, prio=3
+    S1004 @2,2, prio=4
+    S1006 @1,3, prio=6
+    S1001 -- S1002
+    S1001 -- S1005
+    S1002 -- S1003
+    S1005 -- S1004
+    S1005 -- S1003
+    S1003 -- S1004
+    S1004 -- S1006
+
+Y para el ejercicio 7:
+    :protocol stp
+    S1 @1,0, icon=🌳
+    S2 @0,1
+    S3 @2,1
+    S4 @0.5,2
+    S5 @1.5,2
+    S1 -- S2
+    S1 -- S3
+    S1 -- S4
+    S1 -- S5
+    S2 -- S3
+    S2 -- S4
+    S2 -- S5
+    S3 -- S4
+    S3 -- S5
+    S4 -- S5
+
+No resolvimos el inciso b) del ejercicio 7 porque la consigna era algo ambigua.
+
+[1]: https://vincent.bernat.ch/en/blog/2026-spanning-tree
