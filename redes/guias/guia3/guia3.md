@@ -600,3 +600,363 @@ Con todos los LSAs, A tiene el grafo entero y corre SPF desde sí mismo:
 | D | 3 | C | A→C→D |
 
 Todo sale por **C**: el enlace directo A–B (5) pierde contra A→C→B (4), y a D se llega por A→C→D (3).
+
+## Ejercicio 13
+
+*(resuelto con Claude)*
+
+Calcular la **capacidad de red (bps)** que consume el protocolo de ruteo (solo su overhead, aparte de los datos) en tres topologías, ya convergidas.
+
+**Datos del enunciado:**
+- Updates automáticos cada **30 s**.
+- Overhead de headers = **32 bits** (para ambos protocolos).
+- Métricas = entero de **32 bits**. Direcciones = **IPv4 = 32 bits**.
+- OSPF: ignorar paquetes de control (HELLO, ACK); contar los updates automáticos.
+
+**Idea general:** `bps = (bits que se mandan por ciclo) / 30 s`. Todo el trabajo es contar bits por ciclo, y para eso hace falta el **tamaño de cada mensaje** (con las piezas de arriba) y el **comportamiento** de cada protocolo (quién manda qué a quién).
+
+### Modelo de cada protocolo
+
+**RIP (Distance Vector):** cada router manda su **tabla completa** a **cada vecino directo**.
+- Tamaño de un mensaje = `32 (header) + R × (32 dir + 32 métrica) = 32 + 64·R`, con `R` = nº de destinos. Acá `R = 5` (un destino por router; convención fija para las tres redes).
+- → cada mensaje = `32 + 64×5 = 352 bits`.
+- Nº de mensajes por ciclo = un mensaje por cada sentido de cada enlace = **`2 × (nº de enlaces)`** = suma de grados.
+
+**OSPF (Link State):** cada router **floodea** un LSA que describe **sus propios enlaces**, y por flooding cada LSA cruza **todos** los enlaces (convención `O(n·E)`: una vez por enlace).
+- Tamaño de un LSA = `32 (header) + grado × (32 + 32) = 32 + 64·grado`.
+- Bits por ciclo = `(nº de enlaces) × Σ(tamaño de todos los LSAs)`, o equivalente: cada enlace transporta los `n` LSAs.
+
+> Dato útil: en cualquier grafo `Σ grados = 2 × enlaces`. Por eso, con la misma cantidad de enlaces, RIP y OSPF dan lo mismo aunque cambie la forma (mientras sea árbol). La topología recién pesa cuando cambia el **nº de enlaces** (y aparecen ciclos).
+
+### Red 1 — Línea (A–B–C–D–E), 4 enlaces
+
+```
+A — B — C — D — E
+```
+Grados: A=1, B=2, C=2, D=2, E=1.
+
+**RIP:** mensajes = `2×4 = 8`, cada uno 352 bits.
+`8 × 352 = 2816 bits/ciclo` → **2816 / 30 ≈ 93,9 bps**
+
+**OSPF:** LSAs → A,E: `32+64=96`; B,C,D: `32+128=160`. `Σ = 672 bits`.
+Es un árbol → cada LSA cruza los 4 enlaces: `672 × 4 = 2688 bits/ciclo` → **2688 / 30 ≈ 89,6 bps**
+
+### Red 2 — Estrella (A central con B, C, D, E), 4 enlaces
+
+```
+    B
+    |
+C — A — D
+    |
+    E
+```
+Grados: A=4, B=C=D=E=1.
+
+**RIP:** A manda 4, cada hoja manda 1 → `2×4 = 8` mensajes de 352.
+`8 × 352 = 2816 bits/ciclo` → **≈ 93,9 bps** (igual que la línea).
+
+**OSPF:** LSAs → A: `32+256=288`; B,C,D,E: `32+64=96`. `Σ = 288 + 4×96 = 672 bits`.
+Árbol con 4 enlaces → `672 × 4 = 2688 bits/ciclo` → **≈ 89,6 bps** (igual que la línea).
+
+*La línea y la estrella dan idéntico: mismo nº de enlaces y ambas son árboles.*
+
+### Red 3 — Malla completa K5, 10 enlaces
+
+```
+todos con todos (5 nodos → 5×4/2 = 10 enlaces)
+```
+Grados: todos = 4.
+
+**RIP:** mensajes = `2×10 = 20`, cada uno 352 bits.
+`20 × 352 = 7040 bits/ciclo` → **7040 / 30 ≈ 234,7 bps**
+
+**OSPF:** todos los LSAs = `32 + 4×64 = 288 bits`. `Σ = 5×288 = 1440 bits`.
+Cada enlace transporta los 5 LSAs: `1440 × 10 = 14400 bits/ciclo` → **14400 / 30 = 480 bps**
+
+> **Nota sobre ciclos:** el `× 10` usa la convención estándar "una vez por enlace" (`O(n·E)`). El flooding **real** en un grafo con ciclos genera **duplicados** (un LSP llega por dos lados antes de descartarse; en K5 son ~16 transmisiones por LSP en vez de 10), así que el conteo físico sería mayor. Si la cátedra pide contar duplicados, el número sube; con la convención habitual queda 14400.
+
+> **Posible corrección (consultar en clase):** si se cuenta el flooding tal como se transmite físicamente —cada router reenvía la primera copia recibida por todas sus interfaces salvo la de entrada, y luego descarta los duplicados—, en `K5` cada LSA se transmite `4 + 4×3 = 16` veces, no 10. Como cada LSA mide 288 bits y hay 5 routers, el consumo OSPF de la red 3 sería `5×16×288 = 23040 bits/ciclo`, es decir **768 bps**. El valor de **480 bps** corresponde a la simplificación de contar cada LSA una única vez por enlace. Hay que confirmar qué convención espera la cátedra.
+
+### Resultado y conclusión
+
+| Red | Enlaces | RIP (bits/ciclo · bps) | OSPF (bits/ciclo · bps) |
+|---|---|---|---|
+| 1 (línea) | 4 | 2816 · 93,9 | 2688 · 89,6 |
+| 2 (estrella) | 4 | 2816 · 93,9 | 2688 · 89,6 |
+| 3 (malla K5) | 10 | 7040 · 234,7 | **14400 · 480** |
+
+**Conclusión:** en redes poco conectadas (árboles) ambos protocolos consumen casi lo mismo. Pero en la **malla densa OSPF cuesta más del doble que RIP**: RIP crece como `2·enlaces × (tabla fija)`, mientras que OSPF crece como `enlaces × ΣLSA`, y en una malla el `ΣLSA` **también** crece con la conectividad → el flooding replica LSAs grandes sobre muchísimos enlaces. Es el precio de que *todos conozcan la topología completa*.
+
+*(Recordar que estos números salen de la simplificación del enunciado — OSPF real no manda updates completos cada 30 s, sino que refresca LSAs cada ~30 min y usa updates disparados por evento. Acá se lo fuerza a 30 s solo para poder compararlo con RIP.)*
+
+## Ejercicio 14
+
+*(parte a resuelta con Claude — el b lo hago yo)*
+
+Se dan tres tablas obtenidas de **distintos equipos** de una red TCP/IP y hay que deducir el esquema (redes, routers, switches, hosts con IP/máscara/MAC).
+
+**Las tres tablas y de quién son:**
+- **Tabla 1 (Red / Máscara / Próximo salto):** tabla de ruteo → de un **router (R1)**.
+- **Tabla 2 (MAC Address / Ports):** tabla de direcciones MAC → de un **switch**.
+- **Tabla 3 (Address / Age / Hardware Addr / Interface):** tabla **ARP** → del mismo **R1** (usa Fa0/0 y Fa0/1, igual que la tabla 1).
+
+**Dato clave:** en la ARP, `Age = -` significa **dirección local**, o sea que esa fila es una **interfaz del propio R1**. De ahí salen IP + MAC de R1.
+
+### Redes (3 concretas; la default no es una red)
+
+| Red | Máscara | Notación | Cómo la conoce R1 |
+|---|---|---|---|
+| `192.168.13.0` | `255.255.255.0` | `/24` | directa, por Fa0/1 |
+| `158.42.52.0` | `255.255.252.0` | `/22` | directa, por Fa0/0 |
+| `168.254.0.0` | `255.255.0.0` | `/16` | remota, vía R2 (`158.42.55.243`) |
+| `0.0.0.0/0` (default) | — | — | vía gateway `158.42.55.250` |
+
+El `/22` cubre `158.42.52.0`–`158.42.55.255` (por eso `.55.243` y `.55.250` caen adentro).
+
+### Interfaces de R1 (las filas ARP con `-` = local)
+
+| Interfaz | IP | MAC | Red |
+|---|---|---|---|
+| **Fa0/0** | `158.42.52.253` | `000c.cfc7.d401` | `158.42.52.0/22` |
+| **Fa0/1** | `192.168.13.1` | `000c.cfc7.d402` | `192.168.13.0/24` |
+
+### El switch (tabla MAC/Ports) → topología física del `/22`
+
+Cruzando cada MAC de la tabla 2 con la ARP de R1:
+
+| Puerto switch | MAC | Equipo | IP |
+|---|---|---|---|
+| Fa0/1 | `000c.cfc7.d401` | **R1** (Fa0/0) | `158.42.52.253` |
+| Fa0/2 | `00d0.ff9e.db01` | **R2** | `158.42.55.243` |
+| Fa0/3 | `0004.9aa4.7b48` | **PC1** | `158.42.52.20` |
+| Fa0/4 | `0004.9ad7.5882` | **PC2** | `158.42.53.125` |
+
+- **R2** (`158.42.55.243`, MAC `00d0.ff9e.db01`) está en el `/22` y es el próximo salto hacia `168.254.0.0/16` → conecta la red 2 con la red 3.
+- **Gateway default** `158.42.55.250`: está en el `/22` (por eso es alcanzable por Fa0/0), pero no aparece en ARP ni en el switch → sabemos que existe, no su MAC ni su puerto.
+
+### Esquema deducido (a)
+
+```
+              red 192.168.13.0/24
+                       │
+      Fa0/1 192.168.13.1  (000c.cfc7.d402)
+                 ┌───────┴───────┐
+                 │      R1       │
+                 └───────┬───────┘
+      Fa0/0 158.42.52.253  (000c.cfc7.d401)
+                       │
+              ┌────────┴─────────┐
+              │      SWITCH       │   red 158.42.52.0/22
+              └─┬──────┬──────┬───┘
+             Fa0/2  Fa0/3  Fa0/4       (Fa0/1 → R1)
+               │      │      │
+              R2     PC1    PC2
+          .55.243  .52.20  .53.125
+        00d0.ff9e 0004.9aa4 0004.9ad7
+               │
+        red 168.254.0.0/16
+
+   (+ gateway default 158.42.55.250, en el /22, MAC/puerto desconocidos)
+```
+
+### b) A qué entrada va cada datagrama
+
+R1 aplica **longest prefix match** sobre su tabla de ruteo.
+
+| IP destino | Entrada de la tabla | Salida | Nota |
+|---|---|---|---|
+| `158.42.196.11` | `0.0.0.0/0` (default) | → `158.42.55.250` | `.196` ∉ `/22` (`.52`–`.55`) |
+| `158.42.52.13` | `158.42.52.0/22` | Fa0/0 (directa) | — |
+| `127.0.0.1` | — (loopback) | **no se rutea** | `127.0.0.0/8` es local; se maneja en el host, nunca sale por una interfaz (si llegara del cable, se descarta como *martian*) |
+| `192.168.1.1` | `0.0.0.0/0` (default) | → `158.42.55.250` | no matchea `192.168.13.0/24` (`.1.x` ≠ `.13.x`). El ruteo **no** descarta por ser rango privado |
+| `192.168.13.123` | `192.168.13.0/24` | Fa0/1 (directa) | — |
+| `168.254.255.255` | `168.254.0.0/16` | → `158.42.55.243` (R2) | es la **broadcast dirigida** del `/16` |
+
+**Dos trampas del ejercicio:**
+- `127.0.0.1` es **loopback**: no se reenvía; se resuelve localmente (no confundir con la ruta default).
+- `192.168.1.1` **no** se descarta por ser IP privada — el forwarding solo sigue la tabla (longest prefix match), así que cae en la default. Filtrar rangos privados es tarea de un firewall/política, no de la decisión de ruteo.
+
+
+## Ejercicio 15
+
+*(emprolijado con Claude)*
+
+Datos: el router (R1) tiene dos interfaces, **10.0.2.1/24** y **10.0.3.1/30**. Tiene un único router vecino directamente conectado (R2), del que recibe periódicamente este paquete RIP:
+
+| 10.0.2.0 | 10.0.3.0 | 10.0.4.0 | 10.0.5.0 |
+|---|---|---|---|
+| 255.255.255.0 | 255.255.255.252 | 255.255.255.0 | 255.255.255.0 |
+| 1 | 0 | 0 | 1 |
+
+Convención de la práctica: red directamente conectada → costo **0**; red aprendida → costo recibido **+1**.
+
+### a) Topología posible
+
+Lectura del paquete de R2:
+- **10.0.3.0/30 con costo 0** → R2 está conectado a esa red. Es la que compartimos (el /30 punto a punto entre R1 y R2).
+- **10.0.4.0/24 con costo 0** → también es una red directa de R2.
+- **10.0.2.0/24 con costo 1** → está a un salto de R2: es la nuestra, la aprendió de nosotros. (Que nos la devuelva significa que R2 **no usa split horizon**.)
+- **10.0.5.0/24 con costo 1** → está a un salto de R2 y no es nuestra → hay un **tercer router (R3)** más allá de R2, conectado a 10.0.4.0/24 y a 10.0.5.0/24.
+
+```
+10.0.2.0/24 — R1 — 10.0.3.0/30 — R2 — 10.0.4.0/24 — R3 — 10.0.5.0/24
+        .2.1    .3.1          .3.2
+```
+
+![Topología](image.png)
+
+### b) Paquete RIP que envía R1
+
+R1 anuncia sus dos redes directas con costo 0 y las que aprendió de R2 con costo +1. Asumo **sin split horizon** (igual que R2):
+
+| 10.0.2.0 | 10.0.3.0 | 10.0.4.0 | 10.0.5.0 |
+|---|---|---|---|
+| 255.255.255.0 | 255.255.255.252 | 255.255.255.0 | 255.255.255.0 |
+| 0 | 0 | 1 | 2 |
+
+*(Con split horizon, R1 no le devolvería a R2 lo que aprendió de él: el paquete llevaría sólo 10.0.2.0/24 y 10.0.3.0/30 con costo 0.)*
+
+### c) Tabla de forwarding de R1
+
+El next hop hacia las redes remotas es la IP de R2 en el /30. En un /30 las direcciones son .0 (red), .1, .2 y .3 (broadcast); la .1 es nuestra, así que R2 **tiene que ser 10.0.3.2** (el único host que queda).
+
+| Red destino | Próximo salto |
+|---|---|
+| 10.0.2.0/24 | interfaz 10.0.2.1 (directa) |
+| 10.0.3.0/30 | interfaz 10.0.3.1 (directa) |
+| 10.0.4.0/24 | 10.0.3.2 |
+| 10.0.5.0/24 | 10.0.3.2 |
+
+*(El enunciado no numera las interfaces; si se las llama IF0 / IF1, es una asignación asumida.)*
+
+
+## Ejercicio 16
+
+### a)
+R1 inunda **un solo LSP** con las redes a las que está directamente conectado, cada una con su costo $10^{10}/BW$ (formato de la cátedra `ID | NUM SEQ | TTL | RED | COSTO`; SEQ y TTL simbólicos):
+
+```
+ID: R1 | SEQ: Y | TTL: X
+```
+
+| Red | BW | Costo |
+|---|---|---|
+| 161.139.1.224/27 | 100 Mbps | 100 |
+| 161.139.1.192/27 | 100 Mbps | 100 |
+| 161.139.0.0/29 | 10 Gbps | 1 |
+| 161.139.0.24/29 | 1 Gbps | 10 |
+
+Los routers vecinos no van como fila aparte: quedan implícitos en las redes compartidas (0.0/29 y 0.24/29), que ellos también anuncian en sus LSPs.
+
+### b)
+Asumo que la consigna quiso decir 161.139.0.24/29 (red por la que se conecta R1 con mi hipotetico R3)
+Supongo que el RIP si ya convergió, pre corte sería tipo
+
+| Red | Saltos |
+|---|---|
+| 161.139.1.224/27 |  0   |
+| 161.139.1.192/27 |  0   |
+| 161.139.0.0/29   |  0   |
+| 161.139.0.24/29  |  0   |
+| 161.139.1.128/26 |  1   | 
+| 161.139.0.8/29   |  1   | 
+| 161.139.0.16/29  |  1   | 
+| 161.139.1.0/26   |  1   | 
+| 161.139.1.64/26  |  2   |
+
+Post corte, sería algo así
+
+| Red | Saltos |
+|---|---|
+| 161.139.1.224/27 |  0   |
+| 161.139.1.192/27 |  0   |
+| 161.139.0.0/29   |  0   |
+| 161.139.0.24/29  |  16  |
+| 161.139.1.128/26 |  1   | 
+| 161.139.0.8/29   |  1   | 
+| 161.139.0.16/29  |  2   | 
+| 161.139.1.0/26   |  3   | 
+| 161.139.1.64/26  |  2   |
+
+## Ejercicio 17
+
+### a)
+```
+ID: R1 | SEQ: Y | TTL: X
+```
+
+| Red | BW | Costo |
+|---|---|---|
+| 192.168.5.0/30 | 1gbps | 10 |
+| 192.168.1.0/30 | 10mbps | 1000 |
+| 161.139.21.64/26 | 1gbps | 10 |
+
+### b)
+
+*(armado con Claude)*
+
+**Topología y costos** ($10^{10}/BW$). Llamo **RA** (arriba), **RI** (izquierda), **RD** (derecha) a los otros tres routers.
+| Red | Entre | BW | Costo |
+|---|---|---|---|
+| 161.139.21.64/26 | R1 (hosts) | 1 Gbps | 10 |
+| 161.139.21.128/26 | RI (hosts) | 1 Gbps | 10 |
+| 161.139.21.0/26 | RA (hosts) | 1 Gbps | 10 |
+| 161.139.21.192/26 | RD (hosts) | 1 Gbps | 10 |
+| 192.168.5.0/30 | R1–RI | 1 Gbps | 10 |
+| 192.168.1.0/30 | R1–RD | 10 Mbps | 1000 |
+| 192.168.4.0/30 | RI–RA | 100 Mbps | 100 |
+| 192.168.3.0/30 | RA–RD | 1 Gbps | 10 |
+| 192.168.2.0/30 | RI–RD | 10 Mbps | 1000 |
+
+**Direcciones** (sólo las que necesita la tabla de R1). En cada /30: .0 red, .3 broadcast, .1 y .2 los extremos → vecino **.1**, R1 **.2**. En el /26 de R1: red .64, broadcast .127, hosts .65–.126 → R1 **.65**.
+
+| Interfaz de R1 | IP | Vecino del otro lado |
+|---|---|---|
+| IF0/0 | 161.139.21.65/26 | (hosts) |
+| IF0/1 | 192.168.5.2/30 | RI = 192.168.5.1 |
+| IF0/2 | 192.168.1.2/30 | RD = 192.168.1.1 |
+
+**Dijkstra desde R1** (sobre los routers):
+
+| Paso | Confirmado | Tentativo |
+|---|---|---|
+| 0 | (R1, 0, −) | (RI, 10, RI), (RD, 1000, RD) |
+| 1 | + (RI, 10, RI) | RA = 10+100 = (RA, 110, RI); RD: min(1000, 10+1000) = 1000 |
+| 2 | + (RA, 110, RI) | RD: min(1000, 110+10) = **(RD, 120, RI)** |
+| 3 | + (RD, 120, RI) | — |
+
+**Todo sale por RI (192.168.5.1)**, incluso RD: llegar dando la vuelta por RI y RA (10+100+10 = 120) es mucho más barato que el enlace directo de 10 Mbps (1000).
+
+**Tabla de forwarding de R1** (`Red | Next hop`: interfaz si es directa, IP del vecino si es remota):
+
+| Red | Next hop |
+|---|---|
+| 161.139.21.64/26 | IF0/0 |
+| 192.168.5.0/30 | IF0/1 |
+| 192.168.1.0/30 | IF0/2 |
+| 161.139.21.128/26 | 192.168.5.1 |
+| 161.139.21.0/26 | 192.168.5.1 |
+| 161.139.21.192/26 | 192.168.5.1 |
+| 192.168.4.0/30 | 192.168.5.1 |
+| 192.168.3.0/30 | 192.168.5.1 |
+| 192.168.2.0/30 | 192.168.5.1 |
+
+### c)
+
+*(armado con Claude)*
+
+**Diferencia con b):** la tabla de **routing** es el resultado del algoritmo (Dijkstra): para cada destino guarda el **costo** del mejor camino y el próximo salto. La de **forwarding** es la que se usa para despachar paquetes: sólo `red → por dónde sale`, sin costos.
+
+Costo a una red = costo hasta el router más cercano que la toca + costo de esa red.
+
+| Destino | Costo | Próximo salto | Camino |
+|---|---|---|---|
+| 161.139.21.64/26 | 10 | − (directa) | |
+| 192.168.5.0/30 | 10 | − (directa) | |
+| 192.168.1.0/30 | 1000 | − (directa) | |
+| 161.139.21.128/26 | 20 | RI | R1→RI |
+| 192.168.4.0/30 | 110 | RI | R1→RI |
+| 161.139.21.0/26 | 120 | RI | R1→RI→RA |
+| 192.168.3.0/30 | 120 | RI | R1→RI→RA |
+| 161.139.21.192/26 | 130 | RI | R1→RI→RA→RD |
+| 192.168.2.0/30 | 1010 | RI | R1→RI |

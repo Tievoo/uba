@@ -274,3 +274,232 @@ $$E_{SWS=127} = \frac{0.127}{0.542} \approx 0.2343 \Rightarrow \mathbf{23.43\%}$
 
 $$E_{SWS=255} = \frac{0.255}{0.542} \approx 0.4705 \Rightarrow \mathbf{47.05\%}$$
 respectivamente.
+
+# Ejercicios de Parcial
+
+## Ejercicio 15
+
+### a)
+
+640x480 pixeles = 307200 px. 
+cada pixel puede adoptar 256 colores. 256 es 2^8 así que hay 8 bits x pixel
+son 2457600 bis por imagen.
+20 imagenes x segundo = Rb
+Entonces tenemos 49152000 bits por segundo, o 49,15 Mbps
+4MHz
+La fuente es equiprobable, es decir, cada color tiene 1/256 de aparecer.
+SNR min = 2^Rb/B - 1
+
+49,15/4 = 12.29 ish
+SNRmin = 2^12.29 - 1 = 5006.93 ISH.
+
+en dB, 10*log_10(5006.93) 37dB ish.
+
+### b)
+
+C = 4Mhz * log_2(1 + 5006)? = 49.15ish mbps, y V_tx = C. en ese caso, si mandamos 20 imagenes en un segundo, mandamos una cada 0.05s
+
+### c)
+sabemos que t_tx es 0.05s, entonces para que t_prop sea 0.05s, con 300.000km/s, tenemos que llevar a 15000km.
+
+## Ejercicio 16
+
+
+### a)
+Variables
+D = 10km (mínimo)
+40dB de SNR a 10km
+V_prop a 300000km/s
+Sabemos que H(avion) = 50kb como fuente
+para que usamos eso? para estar sin perdida, V_tx debe ser menor que C y los paquetes los vamos a tomar de 50kb.
+
+tenemos que manadar 80 paquetes por segundo, o sea 4000kb por segundo (o 4mb). o sea, necesito 4MB/s? eso es todo?
+no
+C = B *log_2(1+10000)
+C = Rb = 4000kbps, entonces B = 4000/13.288 =ish a 301khz.
+
+### b)
+Tenemos 4Mbps, entonces mandamos 80 simbolos por segundo, un simbolo son 50kb, son 0.0125s por paquete.
+Ttx = 50000/4000000 = 0.0125
+Después, eso viaja en el encale a 300000km/s, a 10 putos kilometros de distancia, cosa que es total y completamente despreciable, con exactitud son 0.0000333
+entonces son 0.0125333s por paquete. ish.
+
+### c)
+70ms = 0.07s. buscamos que nuestro delay por paquete (que definimos recién como 0.0125333s) sea maximo 0.07. pero nos bajaron el ancho de banda, una bocha.
+
+Es decir, pasamos a tener 20kHz! de ancho de banda. Para que un paquete sea a lo sumo 0.07s, significa que los 80 paquetes por segundo
+
+C = 20kHz*(13.288) = 265.75Kbps de ancho de banda. Chan! Seguimos teniendo que mandar 80 paquetes por segundo, o sea que cada paquete debe pesar, a lo mucho, 3.32kb, que tendremos de entropía entonces.
+
+Epa, pero nunca usamos lo 0.07ms! Y bueno, eso pasa porque yo asumí que todavía queremos mandar 80 paquetes por segundo. ahora, no tendría sentido la consigna no? es claro esto: si tenes 80 paquetes por segundo, cada uno dura 0.0125. entonces pedir 0.07 no condice con mantener los 80. descartemoslos!
+
+Hasta calcular el C ibamos bien.
+Nuestro delay por paquete, recordemos, es de:
+
+T_tx = |frame|/V_tx(=C=265.75kbps)
+Delay = T_tx(frame) + T_prop(frame(despreciable))
+cual es el largo de un frame? definimos que usamos la entropía, entonces es nuestra incognita! y T_tx ya lo tenemos, es 0.07s!
+0.07s = H/(265.75kbps) + (0.000033... +-= 0)
+= 0.07s *265.75kbps = H_max = 18.6 kb!
+
+Capaz este tiene más sentido. con 0.07s, eso nos quedaría 14.28 paquetes por segundo. (Bastantes menos!)
+
+## Ejercicio 17
+
+Usa SACK
+|Frame| es de 2kbit
+|SEQ| es 4 bits
+
+### a)
+10kbps, 1 s de delay,
+eficiencia = SWS * T_tx(F)/RTT,
+RTT = 2(T_tx + T_prop)
+Tenemos 1 segundo de delay, que segun slides, es el T_prop
+Calculemos el T_tx. Sabemos que nuestra V_tx es de 10kbps, y que nuestro frame es de 2kbits, entonces claramente el T_tx es de 0.2s (o 200ms).
+Entonces sabemos que el RTT es de 2.4s
+También podemos calcular el SWS como 
+
+SWS = ceil(V_tx*RTT/|Frame|). esto queda, 10kbps * (2.4/2kb), entonces el SWS = 12.
+OPA. eso es el SWS óptimo! pero tenemos el #SEQ limitado a 4. entonces, recordemos, que #SEQ = ceil(log_2(SWS+RWS)). comoe s SACK, rws = sws
+entonces, SWS + RWS = 16 => SWS = RWS = 8. woops.
+
+En ese caso, la eficiencia es 8*(0.2/2.4) te queda 2/3, o 66.67% de eficiencia. Obviamente, si tuviesemos el SWS óptimo, (12), para el que necsitamos un #SEQ de 5 bits, tendríamos 100% de eficiencia.
+
+### b)
+
+tengo 8 de sliding window, entonces mando los 4 juntos al hilo. 2 rebotan con ack, los otros dos no llegan. el ack del 5 devuelve que falta el 4, el ack del 7 marca que falta el 6. se manda el 4, devuelve un ack diciendo q leyó hasta el 5, y despues se manda el 6, y un ack diciendo que leyop hasta el 7, y estamos al día. No se si se hace on timeout o antes, depende de si tiene NAK, pero no vimos eso en clase.
+
+## Ejercicio 18
+
+#SEQ de 10 bits
+#ACK de 10 bits
+#SACK de 10 bits
+Checksum de 16 bits.
+Largo fijo de 2kbit, eso nos deja con 2000-46 = 1954 bits de datos.
+
+### a)
+Estos numeros que nos piden son RWS Y SWS. Son el mismo, dado que estamos en SACK.
+
+El SWS podemos estimarlo masomenos en base aal #seq, que es ceil(log2(SWS+RWS)) = 10, o sea que el SWS es +- 512, es decir,
+2^k-1, 2^9. RWS es igual
+
+### b)
+
+La eficiencia de un protocolo se miude como T_tx(Ventana)/RTT(Frame). En primer lugar, si tenemos el doble de distancia, Va a aumentar el RTT, porque el RTT es
+2*(T_tx + T_prop). T_prop estaría duplicado en este caso. Teniendo en cuenta que un SWS*T_tx(F) = RTT (SWS frames van en un RTT), podemos deducir que T_prop = 255\*T_tx de F. Entonces la eficiencia bajaría a un 50% aproximadamente.
+A la eficiencia del frame le importa un bledo la distancia, es |datos|/|frame|. en este caso, de yapa, es 0.977.
+
+### c)
+Tenemos V_tx de 1mbps. Queremos buscar el T_tx de 20 Mbit de datos.
+T_total = #Frames * |F|/V_tx + T_prop.
+
+Que cosas tengo, y que cosas no? T_prop no lo tengo, pero lo puedo deducir.
+
+SWS optimo = V_tx * RTT(F)/|F|
+512 = 1000000 * x / 2000
+1024000 = 1000000*x
+1024000/1000000 = x
+x= 1.024
+
+RTT(F) = 2*(T_tx(F) + T_prop)
+T_tx(F) = 2000/1000000 = 0.002s de un frame
+1.024 = 2*(0.002 + x)
+1.024 = 0.004 +2x
+1.02 = 2x
+x = 0.51s
+
+Tenemos T_prop! nota, con eso podemos definir bien la eficiencia arriba en el b, pero me da paja.
+me falta cuantos frame son
+
+entonces
+#Frames = ceil(20000000/1954) = 10236 frames.
+T_total ahora sí
+= 10236 * 2000/1000000 +0.51s
+= 20.472 + 0.51s = 20.982 ISH.
+
+
+## Ejercicio 19
+
+*(resuelto por Claude)*
+
+Datos: enlace de 60 Mbps, ventana deslizante. El satélite **sólo envía datos**; la Tierra responde con un frame de reconocimiento de **1024 bits**: `#ACK (16) | #SACK (16) | Padding | Checksum (16)`.
+
+### a)
+
+Hay campo `#SACK` → es **ACK selectivo** → $RWS = SWS$.
+
+El `#ACK` tiene 16 bits, así que hay $2^{16} = 65536$ números de secuencia distintos. Para evitar reencarnaciones:
+
+$$SWS + RWS \le 2^{16} = 65536 \quad\Rightarrow\quad 2\cdot SWS \le 65536$$
+
+$$\mathbf{SWS = RWS = 2^{15} = 32768}$$
+
+### b)
+
+El satélite sólo manda datos (no hay piggybacking), así que su frame no necesita `#ACK`. Tiene que numerar con el mismo espacio de secuencia que usa la Tierra para reconocer (16 bits):
+
+`#SEQ (16bits); Datos (992bits); Checksum (16bits)` → total 1024 bits.
+
+$$|Datos| = 1024 - 16 - 16 = 992\ \text{bits}$$
+
+$$\eta_{frame} = \frac{992}{1024} \approx \mathbf{0.969 = 96.9\%}$$
+
+### c)
+
+El delay dado (6 min) es $T_{prop}$ (convención de la materia): $T_{prop} = 360\ \text{s}$.
+
+$$T_{tx}(F) = \frac{1024}{60\cdot10^6} \approx 1.707\cdot10^{-5}\ \text{s}$$
+
+$$RTT(F) = 2\cdot(T_{tx}(F) + T_{prop}) = 2\cdot(0.00001707 + 360) \approx 720.00003\ \text{s}$$
+
+$$T_{tx}(V) = SWS\cdot T_{tx}(F) = 32768 \cdot 1.707\cdot10^{-5} \approx 0.5592\ \text{s}$$
+
+$$\eta_{proto} = \frac{T_{tx}(V)}{RTT(F)} = \frac{0.5592}{720.00003} \approx 7.77\cdot10^{-4} \approx \mathbf{0.078\%}$$
+
+Tiene sentido que sea bajísima: la ventana se manda en medio segundo y después el satélite se queda ~12 minutos esperando el primer ACK. La ventana óptima sería $V_{tx}\cdot RTT/|F| \approx 42$ millones de frames, pero los 16 bits de secuencia la limitan a 32768.
+
+## Ejercicio 20
+
+*(resuelto por Claude)*
+
+Datos: SNR = 30 dB, $B = 50$ MHz, cámara de 5 Megapíxeles por imagen, 12 bits por píxel.
+
+### a)
+
+**Capacidad del canal** (Shannon):
+
+$$SNR = 10^{30/10} = 1000 \text{ veces}$$
+
+$$C = B\cdot\log_2(1+SNR) = 50\cdot10^6\cdot\log_2(1001) \approx 50\cdot10^6 \cdot 9.967 \approx 498.36\ \text{Mbps}$$
+
+**Bits por imagen**: 12 bits por píxel → $2^{12} = 4096$ valores posibles. Como la fuente es **equiprobable**, $H = \log_2(4096) = 12$ bits/píxel, y el código de largo fijo de 12 bits ya es óptimo ($L = H$).
+
+$$|imagen| = 5\cdot10^6 \cdot 12 = 60\cdot10^6\ \text{bits}$$
+
+**Sin pérdida** → $R_b \le C$:
+
+$$R_b = img/s \cdot 60\cdot10^6 \le 498.36\cdot10^6 \quad\Rightarrow\quad img/s \le 8.306$$
+
+Como son imágenes enteras: **hasta 8 imágenes por segundo**.
+
+### b)
+
+Usando $V_{tx} = C$ (máximo, salvo que se diga lo contrario):
+
+$$T_{tx}(imagen) = \frac{60\cdot10^6}{498.36\cdot10^6} \approx 0.12039\ \text{s}$$
+
+$$T_{prop} = \frac{2\ \text{km}}{300000\ \text{km/s}} \approx 6.67\cdot10^{-6}\ \text{s}$$
+
+$$Delay(imagen) = T_{tx} + T_{prop} \approx 0.12039 + 0.0000067 \approx \mathbf{0.1204\ s \approx 120.4\ ms}$$
+
+$T_{prop}$ es despreciable: a 2 km casi todo el delay es transmisión. (Es "promedio" porque la entropía es un promedio de bits por símbolo; con fuente equiprobable y largo fijo, en realidad todas las imágenes miden lo mismo.)
+
+### c)
+
+Si la fuente **no** es equiprobable, su entropía es **menor** que el máximo: $H < \log_2(4096) = 12$ bits/píxel (la entropía es máxima sólo cuando los símbolos son equiprobables).
+
+Con una codificación óptima (ej. Huffman, dándole códigos más cortos a los colores más probables), el largo promedio $L$ puede acercarse a $H$ ($H \le L < H+1$), así que cada píxel usa **en promedio menos de 12 bits** → cada imagen pesa menos bits → con la misma capacidad $C$ entran más imágenes por segundo:
+
+$$img/s \le \frac{C}{5\cdot10^6 \cdot L} \quad\text{con } L < 12$$
+
+Es "en teoría" porque depende de conocer la distribución real de la fuente y de usar un código que la aproveche; la capacidad del canal no cambia, lo que baja es cuántos bits hace falta mandar.
