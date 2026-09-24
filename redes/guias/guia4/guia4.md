@@ -213,3 +213,121 @@ Una muestra de RTT se toma entre que se manda algo que **consume número de secu
 | Par | Por qué |
 |---|---|
 | **#6 / #7 ↔ #8** | El segmento se retransmitió (mismo `seq=302, len=1000`) → ambigüedad del ACK → Karn/Partridge lo excluye |
+
+## Ejercicio 9
+
+Nuestro host es `192.168.1.104`. Estado inicial según netstat:
+- `0.0.0.0:7777` en **LISTEN** (tenemos un server escuchando en el 7777).
+- `:48600 ↔ 200.42.33.121:80` **ESTABLISHED** (somos cliente HTTP).
+- `:34688 ↔ 69.163.203.254:80` **TIME_WAIT** (somos cliente y cerramos primero → *active closer*).
+- `:45911 ↔ 173.194.42.245:443` **ESTABLISHED** (somos cliente HTTPS).
+
+### a. netstat al final de los 5 minutos
+
+Conexión por conexión:
+
+- **`0.0.0.0:7777` LISTEN → sigue en LISTEN.** Aceptar una conexión no consume el socket que escucha: la conexión nueva es *otro* socket, con su 4-tupla completa.
+- **Nueva: `:7777 ↔ 192.168.1.247:27351` → ESTABLISHED.** Three-way handshake completo (#1 SYN, #4 SYN-ACK, #5 ACK) y después nada más. Nosotros somos el servidor: `LISTEN → SYN_RCVD → ESTABLISHED`.
+- **`:48600 ↔ 200.42.33.121:80` → sigue ESTABLISHED.** Hay tráfico (#2 GET, #6 ACK, #7 200 OK), pero ningún FIN ni RST.
+- **`:34688 ↔ 69.163.203.254:80` → desaparece (CLOSED).** TIME_WAIT dura `2·MSL` (con MSL = 2 min según RFC 793, 4 min; en Linux 60 s), menos que los 5 minutos de la captura. Al vencer el timer pasa a CLOSED y deja de listarse.
+  > Que estemos en TIME_WAIT siendo cliente no es raro: TIME_WAIT le toca al **que cerró primero** (*active close*), sea cliente o servidor. Cliente/servidor solo importa en la apertura (quién hace LISTEN y quién CONNECT); una vez en ESTABLISHED, cualquiera de los dos puede cerrar primero.
+- **`:45911 ↔ 173.194.42.245:443` → CLOSE_WAIT.** En #8 el server manda su FIN (es su propio FIN y no la respuesta a uno nuestro: `Ack=2347` es nuestro `Seq` actual; si hubiéramos mandado FIN, el ack sería 2348). En #9 lo ackeamos (`Ack=4563 = 4562+1`). Somos el *passive closer*: `ESTABLISHED → CLOSE_WAIT`. Para seguir a LAST_ACK nuestra aplicación tendría que hacer `close()` y mandar su FIN, y como la traza es la porción final del tráfico, eso no ocurrió.
+
+```
+Proto  Local Address          Foreign Address        State
+tcp    0.0.0.0:7777           0.0.0.0:*              LISTEN
+tcp    192.168.1.104:7777     192.168.1.247:27351    ESTABLISHED
+tcp    192.168.1.104:48600    200.42.33.121:80       ESTABLISHED
+tcp    192.168.1.104:45911    173.194.42.245:443     CLOSE_WAIT
+```
+
+### b. Instante más temprano en que el receptor puede enviar datos
+
+El receptor es **nuestro host** (`192.168.1.104:7777`), que en esta conexión hace de servidor.
+- Al recibir el SYN (#1) y mandar el SYN-ACK (#4) queda en **SYN_RCVD**. En ese estado todavía no puede mandar datos (según RFC 793, un SEND se encola hasta llegar a ESTABLISHED).
+- Pasa a **ESTABLISHED al recibir el #5** (el ACK del cliente). **Ese es el instante más temprano en que puede enviar datos.**
+
+En cambio, el que inició la conexión (`192.168.1.247`) ya está ESTABLISHED al recibir el #4, así que podría mandar datos junto con el propio #5 (*piggybacked*).
+
+## Ejercicio 10
+
+La captura se hace desde `192.168.0.1`, el **default gateway** de `192.168.0.100`: todo el tráfico de `.100` hacia otras redes pasa por él, por eso ve toda la conexión (y en el b puede alterarla, como *man-in-the-middle*).
+
+Roles: **cliente** = `192.168.0.100:60205` (manda el SYN, *active open*); **servidor** = `157.92.27.21:80` (HTTP, *passive open*, en LISTEN de antemano).
+
+### a. Cambios de estado de ambos extremos
+
+| Segmento | Cliente `192.168.0.100` | Servidor `157.92.27.21` |
+|---|---|---|
+| inicio | CLOSED | LISTEN |
+| **#1** SYN → | → **SYN_SENT** | → **SYN_RCVD** (al recibirlo y mandar #2) |
+| **#2** SYN-ACK ← | → **ESTABLISHED** (al recibirlo y mandar #3) | SYN_RCVD |
+| **#3** ACK → | ESTABLISHED | → **ESTABLISHED** |
+| #4 – #9 datos | ESTABLISHED | ESTABLISHED |
+
+- **#4**: el cliente manda el GET (567 bytes, por eso el server ackea `568`).
+- **#6, #8**: el server manda la respuesta HTTP partida en segmentos de 1448 bytes (`Ack=1449`, `Ack=2897`); #7 y #9 son los ACKs del cliente.
+- No hay FIN ni RST → ambos extremos quedan en **ESTABLISHED**.
+
+### b. El gateway reemplaza el #9 por un RST+ACK
+
+`192.168.0.100 → 157.92.27.21  60205 > http [RST, ACK] Seq=568 Ack=2897`
+
+- **El servidor lo acepta como legítimo**: IPs y puertos coinciden con la 4-tupla, y lo decisivo es que un RST solo se acepta si su **número de secuencia cae dentro de la ventana** esperada. `Seq=568` es justo el próximo byte que espera del cliente → válido. No tiene forma de distinguirlo de uno que haya mandado `.100` de verdad.
+- **Servidor: ESTABLISHED → CLOSED** de inmediato. Aborta la conexión sin pasar por los estados de cierre ni por TIME_WAIT, descarta sus buffers, y a la aplicación le llega un *connection reset*.
+- **Cliente: sigue en ESTABLISHED**. Su ACK original nunca le llegó al server y no recibió nada que le avise. Queda una conexión **half-open** (semiabierta): el cliente cree que está conectado y sigue esperando el resto de la respuesta HTTP.
+
+**Qué pasa después**: el servidor no manda nada más (para él la conexión no existe). Si el cliente envía algo, el servidor no tiene estado para esa 4-tupla y responde con **RST** → recién ahí el cliente pasa a **CLOSED**. Si el cliente no envía nada, queda colgado en ESTABLISHED hasta que la aplicación corte por timeout (o salte un keepalive, si está activo).
+
+
+## Ejercicio 11
+
+Host `10.80.1.10`. Comparando netstat en t0 y t1, conexión por conexión:
+
+| Conexión | t0 | t1 | Qué pasó |
+|---|---|---|---|
+| `0.0.0.0:8080` | LISTEN | LISTEN | nada (el socket que escucha no se consume al aceptar) |
+| `:35336 ↔ 157.92.27.21:80` | SYN_SENT | CLOSE_WAIT | se estableció y el server cerró primero |
+| `:51247 ↔ 200.42.93.137:80` | TIME_WAIT | — | venció el timer de 2·MSL → CLOSED |
+| `:8080 ↔ 200.11.54.101:32154` | — | ESTABLISHED | conexión entrante nueva (somos servidor) |
+| `:24592 ↔ 98.139.183.24:80` | ESTABLISHED | ESTABLISHED | sin FIN ni RST (puede haber habido datos o no) |
+
+### a. Intercambio de paquetes propuesto
+
+**Conexión `:35336 ↔ 157.92.27.21:80` (somos cliente).** Nuestro SYN ya se había mandado antes de t0 (por eso estábamos en SYN_SENT).
+
+```
+1. 157.92.27.21  → 10.80.1.10     SYN+ACK   nosotros: SYN_SENT → ESTABLISHED (y mandamos 2)
+2. 10.80.1.10    → 157.92.27.21   ACK       server:   SYN_RCVD → ESTABLISHED
+3. 157.92.27.21  → 10.80.1.10     FIN       nosotros: ESTABLISHED → CLOSE_WAIT (y mandamos 4)
+4. 10.80.1.10    → 157.92.27.21   ACK       server:   FIN_WAIT_1 → FIN_WAIT_2
+```
+
+El server es el *active closer* y nosotros el *passive closer*. Nos quedamos en CLOSE_WAIT porque nuestra aplicación todavía no hizo `close()` (si lo hiciera, mandaríamos FIN y pasaríamos a LAST_ACK).
+
+**Conexión `:8080 ↔ 200.11.54.101:32154` (somos servidor).** El puerto local 8080 es el que estaba en LISTEN, y el remoto (32154) es efímero → la abrió el otro host.
+
+```
+5. 200.11.54.101 → 10.80.1.10     SYN       nosotros: LISTEN → SYN_RCVD (y mandamos 6)
+6. 10.80.1.10    → 200.11.54.101  SYN+ACK   cliente:  SYN_SENT → ESTABLISHED (y manda 7)
+7. 200.11.54.101 → 10.80.1.10     ACK       nosotros: SYN_RCVD → ESTABLISHED
+```
+
+Ojo: mandar el SYN+ACK **no** nos lleva a ESTABLISHED; el servidor pasa a ESTABLISHED recién al **recibir** el ACK (7).
+
+**Conexión `:51247 ↔ 200.42.93.137:80`**: no hacen falta paquetes; solo que venza el timer de TIME_WAIT (2·MSL) → CLOSED, y deja de listarse.
+
+**Conexión `:24592 ↔ 98.139.183.24:80`**: no hace falta proponer paquetes. Puede haber intercambio de datos en ESTABLISHED, pero ni FIN ni RST.
+
+### b. Cota inferior para t1
+
+$$t_1 \geq t_0 + 2 \cdot MSL$$
+
+(≈ 4 minutos si se toma MSL = 2 min, como define el RFC 793.)
+
+Justificación:
+- Según la máquina de estados, de **TIME_WAIT** se sale únicamente por **timeout de 2·MSL** (la teórica lo describe como la *"expiración de temporizador del doble del tiempo de vida máximo del paquete"*).
+- Lo último que manda el que está en TIME_WAIT es el ACK del FIN remoto. Si el otro extremo retransmite su FIN (porque perdió nuestro ACK), se vuelve a ackear y **se reinicia** el timer de 2·MSL (RFC 793, sección 3.9: *"Acknowledge it, and restart the 2 MSL timeout"*).
+- Si el último paquete enviado a `200.42.93.137` fue en t0, el timer arrancó (a más tardar) en t0 → la conexión recién puede pasar a CLOSED en `t0 + 2·MSL`. Como en t1 ya no aparece, `t1 ≥ t0 + 2·MSL`.
+
+El resto de las conexiones no aporta una cota útil: sus intercambios pueden ocurrir en unos pocos RTT.
