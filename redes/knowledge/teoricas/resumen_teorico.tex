@@ -1,0 +1,688 @@
+\documentclass[10pt,a4paper]{article}
+\usepackage[a4paper,margin=17mm,top=16mm,bottom=18mm]{geometry}
+\usepackage{fontspec}
+\setmainfont{texgyrepagella}[Extension=.otf,UprightFont=*-regular,BoldFont=*-bold,ItalicFont=*-italic,BoldItalicFont=*-bolditalic]
+\setsansfont{texgyreheros}[Extension=.otf,UprightFont=*-regular,BoldFont=*-bold,ItalicFont=*-italic,BoldItalicFont=*-bolditalic]
+\usepackage[spanish,es-noshorthands,es-nodecimaldot]{babel}
+\usepackage{amsmath,amssymb}
+\usepackage{microtype}
+\emergencystretch=1.5em
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage[most]{tcolorbox}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{multicol}
+\usepackage[hidelinks]{hyperref}
+
+\definecolor{azul}{HTML}{0B3D6E}
+\definecolor{azulc}{HTML}{E8EEF6}
+\definecolor{verde}{HTML}{1E6B3A}
+\definecolor{verdec}{HTML}{EAF4EC}
+\definecolor{naranja}{HTML}{B5651D}
+\definecolor{naranjac}{HTML}{FBF1E6}
+
+\setlist{itemsep=1.5pt,topsep=3pt,parsep=0pt,leftmargin=16pt}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+\titleformat{\section}{\sffamily\Large\bfseries\color{azul}}{\thesection}{0.6em}{}[{\color{azul}\titlerule[1.2pt]}]
+\titleformat{\subsection}{\sffamily\large\bfseries\color{azul}}{\thesubsection}{0.5em}{}
+\titlespacing*{\section}{0pt}{12pt}{6pt}
+\titlespacing*{\subsection}{0pt}{9pt}{3pt}
+
+\pagestyle{fancy}\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\fancyfoot[C]{\sffamily\small\color{gray}\thepage}
+\fancyfoot[R]{\sffamily\scriptsize\color{gray}Redes — Resumen teórico 2C 2026}
+
+% Cajas
+\newtcolorbox{idea}[1][La idea]{enhanced,breakable,colback=azulc,colframe=azul,
+  boxrule=0.6pt,arc=2pt,left=5pt,right=5pt,top=3pt,bottom=3pt,
+  fonttitle=\sffamily\bfseries\small,title={#1}}
+\newtcolorbox{clave}[1][Para recordar]{enhanced,breakable,colback=verdec,colframe=verde,
+  boxrule=0.6pt,arc=2pt,left=5pt,right=5pt,top=3pt,bottom=3pt,
+  fonttitle=\sffamily\bfseries\small,title={#1}}
+\newtcolorbox{ojo}[1][Ojo]{enhanced,breakable,colback=naranjac,colframe=naranja,
+  boxrule=0.6pt,arc=2pt,left=5pt,right=5pt,top=3pt,bottom=3pt,
+  fonttitle=\sffamily\bfseries\small,title={#1}}
+
+\newcommand{\libro}{\tikz[baseline=(x.base)]\node[fill=naranja,text=white,rounded corners=1.5pt,
+  inner xsep=2pt,inner ysep=1pt,font=\sffamily\scriptsize\bfseries](x){libro};}
+\newcommand{\term}[1]{\textbf{\color{azul}#1}}
+
+\begin{document}
+
+\begin{center}
+{\sffamily\bfseries\huge\color{azul} Redes de Comunicaciones y Cómputo Distribuido}\\[3pt]
+{\sffamily\Large Resumen teórico, explicado fácil} \\[2pt]
+{\small 2do cuatrimestre 2026 — teóricas 03 a Transporte/TCP}
+\end{center}
+
+\begin{ojo}[Cómo leer esto]
+Cada tema arranca con una \textbf{idea intuitiva} (caja azul), sigue con lo que hay que saber y
+cierra con lo que \textbf{conviene tener a mano para la pregunta} (caja verde).
+Lo marcado con \libro{} no está en las diapos: sale de la bibliografía que citan las clases
+(Peterson \& Davie, \emph{A Systems Approach}, 5ta; Tanenbaum \& Wetherall, 5ta).
+\end{ojo}
+
+%====================================================================
+\section*{0. El mapa: capas}
+\begin{idea}
+Mandar datos por una red es como mandar una carta por correo: vos escribís la carta (aplicación),
+la metés en un sobre con dirección (transporte/red), el correo la mete en un camión (enlace) que
+anda por una ruta (físico). Cada nivel sólo se preocupa por su parte y \emph{usa} al de abajo sin
+saber cómo funciona.
+\end{idea}
+\begin{itemize}
+  \item Cada capa \term{encapsula}: le agrega su propio \emph{header} (y a veces \emph{trailer}) al paquete de la capa de arriba.
+  \item \term{OSI} tiene 7 capas (física, enlace, red, transporte, sesión, presentación, aplicación).
+        \term{TCP/IP} (Internet) usa en la práctica: enlace/física, red (IP), transporte (TCP/UDP), aplicación.
+  \item La capa $N$ de un host ``habla'' con la capa $N$ del otro mediante un \term{protocolo} (comunicación \emph{par a par}).
+  \item Los \term{routers} sólo llegan hasta la capa 3 (red). Transporte y aplicación son \term{end-to-end}: sólo existen en los hosts de las puntas.
+\end{itemize}
+
+%====================================================================
+\section{Nivel Físico I: señales}
+
+\begin{idea}
+El nivel físico responde: \emph{¿cómo convierto bits en algo que viaje por un cable, una fibra o el aire?}
+La respuesta es siempre una \textbf{señal} (voltaje, luz, onda de radio) que varía en el tiempo.
+Todo el tema gira alrededor de una pregunta: \textbf{¿qué tan rápido puede cambiar esa señal
+sin que el medio la arruine?} De eso depende cuántos bits por segundo puedo mandar.
+\end{idea}
+
+\subsection{Ondas: lo básico}
+Las señales viajan como \term{ondas electromagnéticas}. En el vacío van a la velocidad de la luz,
+$c = 3\cdot10^8$ m/s; en otros medios van más lento (en un cable de cobre UTP, $\approx 0{,}69\,c$;
+en fibra, $\approx \tfrac23 c$).
+
+La onda más simple es la \term{senoidal}:
+\[ s(t) = A\cdot \sin(2\pi f t + \varphi) \]
+
+\begin{center}
+\begin{tikzpicture}
+\begin{axis}[width=11cm,height=4.2cm,axis lines=middle,xmin=0,xmax=2.15,ymin=-1.35,ymax=1.45,clip=false,
+  xtick=\empty,ytick=\empty,xlabel={$t$},ylabel={$s(t)$},
+  every axis x label/.style={at={(current axis.right of origin)},anchor=west},
+  every axis y label/.style={at={(current axis.north west)},anchor=south}]
+\addplot[azul,thick,domain=0:2,samples=200]{sin(deg(2*pi*x))};
+\addplot[naranja,thin,dashed,domain=0:2,samples=200]{0.6*sin(deg(2*pi*x+pi/2))};
+\draw[<->] (axis cs:0.25,0) -- node[right,font=\small]{$A$} (axis cs:0.25,1);
+\draw[dotted] (axis cs:0.25,1) -- (axis cs:0.25,1.2);
+\draw[<->] (axis cs:0.25,1.2) -- node[above,font=\small]{$T = 1/f$} (axis cs:1.25,1.2);
+\draw[dotted] (axis cs:1.25,1) -- (axis cs:1.25,1.2);
+\end{axis}
+\end{tikzpicture}\\
+{\small En azul una senoide; en naranja otra con \emph{menor amplitud} y \emph{otra fase} (corrida en el tiempo).}
+\end{center}
+
+\begin{itemize}
+  \item \term{Amplitud} $A$: qué tan ``alta'' es (volts, potencia).
+  \item \term{Frecuencia} $f$: cuántas veces por segundo se repite (Hz). \term{Período} $T=1/f$: cuánto dura un ciclo.
+  \item \term{Fase} $\varphi$: dónde arranca el ciclo (un corrimiento en el tiempo).
+  \item \term{Longitud de onda} $\lambda = v/f$: cuántos metros ocupa un ciclo mientras viaja.
+\end{itemize}
+Estas tres cosas ($A$, $f$, $\varphi$) son justamente las ``perillas'' que después vamos a mover para meter bits en la señal (modulación).
+
+\subsection{Fourier: toda señal es una suma de senoides}
+\begin{idea}[La idea: un acorde]
+Un acorde de guitarra suena como un solo sonido, pero en realidad es la suma de varias notas.
+Fourier dice lo mismo de cualquier señal periódica: es una \textbf{suma de senoides} de frecuencias
+$f_0, 2f_0, 3f_0, \dots$ (la fundamental y sus \term{armónicas}), cada una con su amplitud y fase.
+\end{idea}
+
+El ejemplo clave es la \textbf{onda cuadrada}, que es lo que ``querríamos'' mandar para representar bits:
+\[ \text{cuadrada}(t) = \tfrac{4}{\pi}\Big(\sin(\omega t) + \tfrac13\sin(3\omega t) + \tfrac15\sin(5\omega t) + \tfrac17\sin(7\omega t) + \dots\Big) \]
+
+\begin{center}
+\begin{tikzpicture}
+\begin{axis}[width=12cm,height=4.4cm,axis lines=middle,xmin=0,xmax=2.05,ymin=-1.4,ymax=1.4,
+  xtick=\empty,ytick=\empty,legend style={font=\scriptsize,at={(1,1.02)},anchor=south east,legend columns=3,draw=none}]
+\addplot[gray,thick,const plot,domain=0:2] coordinates {(0,1)(0.5,-1)(1,1)(1.5,-1)(2,-1)};
+\addplot[naranja,domain=0:2,samples=300]{4/pi*sin(deg(2*pi*x))};
+\addplot[azul,thick,domain=0:2,samples=400]{4/pi*(sin(deg(2*pi*x))+sin(deg(6*pi*x))/3+sin(deg(10*pi*x))/5+sin(deg(14*pi*x))/7)};
+\legend{cuadrada ideal, sólo fundamental, fundamental + 3 armónicas}
+\end{axis}
+\end{tikzpicture}
+\end{center}
+
+Con pocas armónicas la cuadrada queda ``redondeada''; con más, se parece cada vez más.
+Una cuadrada \emph{perfecta} (cambio instantáneo de 0 a 1) necesita \textbf{infinitas} armónicas, o sea, infinitas frecuencias.
+
+Esto permite mirar una señal de dos formas: en el \term{dominio del tiempo} (cómo varía) o en el
+\term{dominio de la frecuencia} (su \emph{espectro}: qué frecuencias tiene y con cuánta amplitud).
+
+\subsection{Ancho de banda: el canal es un filtro}
+\begin{idea}
+Ningún medio deja pasar todas las frecuencias igual: las muy altas se atenúan (se ``pierden'').
+El canal se comporta como un \textbf{filtro}. El \term{ancho de banda} $B$ es el rango de
+frecuencias que pasa razonablemente bien.
+\end{idea}
+\begin{itemize}
+  \item Si mando una cuadrada por un canal con poco $B$, se pierden las armónicas altas y llega una señal redondeada.
+        Si los bits van muy rápido, se ``mezclan'' y el receptor ya no los distingue.
+  \item Por eso \textbf{el ancho de banda limita la velocidad}: más $B$ permite que la señal cambie más rápido, y entonces más bits por segundo.
+  \item Formalmente, la frecuencia de corte es donde la potencia cae a la mitad: \textbf{$-3$ dB}.
+  \item \term{Decibeles}: $\text{dB} = 10\log_{10}(P_1/P_2)$. Sirven para comparar potencias con números chicos:
+        $3$ dB $\approx$ el doble, $10$ dB $= 10$ veces, $20$ dB $= 100$ veces, $30$ dB $= 1000$ veces.
+\end{itemize}
+
+\subsection{Delay: cuánto tarda en llegar un mensaje}
+\begin{idea}[La idea: una caravana de autos]
+Mandar una trama es como mandar una caravana de autos por una ruta. El \textbf{tiempo de transmisión}
+es cuánto tardan todos los autos en \emph{salir} por el peaje (depende de cuántos autos hay y de qué tan
+rápido pasa cada uno). El \textbf{tiempo de propagación} es cuánto tarda un auto en \emph{recorrer} la ruta
+(depende de la distancia). Si hay cola en el peaje, se suma el \textbf{encolamiento}.
+\end{idea}
+\[ \text{Delay} = T_{prop} + T_{trans} + T_{encol} + T_{proc} \]
+\begin{itemize}
+  \item $T_{prop} = \dfrac{\text{distancia}}{v}$: pesa en enlaces \textbf{largos} (satélite, intercontinentales).
+  \item $T_{trans} = \dfrac{\text{tamaño trama}}{\text{velocidad de TX}}$: pesa en enlaces \textbf{lentos} o tramas \textbf{grandes}.
+  \item $T_{encol}$: lo que se espera en buffers de routers; depende de la congestión (de 0 a enorme).
+  \item $T_{proc}$: lo que tarda el nodo en procesar; microsegundos, casi siempre despreciable.
+\end{itemize}
+\textit{Ejemplo:} 1500 bytes por un enlace de 10 Mbps, 2000 km de cobre ($2\cdot10^8$ m/s):
+$T_{trans} = 12000/10^7 = 1{,}2$ ms, $T_{prop} = 2\cdot10^6/2\cdot10^8 = 10$ ms. Acá manda la propagación.
+
+%====================================================================
+\section{Teoría de la Información (Shannon, 1948)}
+
+\begin{idea}
+Shannon se preguntó: \emph{¿qué es la información y cuánta puedo mandar por un canal con ruido?}
+Su gran idea fue ignorar el \textbf{significado} del mensaje y mirar sólo su \textbf{estadística}.
+Informa más lo que \textbf{sorprende}: ``mañana sale el sol'' no informa nada; ``mañana nieva en Buenos Aires'' informa mucho.
+\end{idea}
+
+Dos preguntas, dos teoremas:
+\begin{enumerate}
+  \item \textbf{Codificación de fuente}: ¿cuánto puedo \emph{comprimir} un mensaje sin perder nada? (límite de la eficiencia)
+  \item \textbf{Codificación de canal}: ¿qué tan rápido puedo mandar \emph{sin errores} por un canal ruidoso? (límite de la confiabilidad)
+\end{enumerate}
+
+\subsection{Información y entropía}
+\begin{itemize}
+  \item \term{Información} de un símbolo con probabilidad $p$: $I = \log_2 \frac1p$ bits. Si $p=1$ (seguro), $I=0$. Cuanto menos probable, más informa.
+  \item \term{Fuente de memoria nula}: cada símbolo es independiente de los anteriores.
+  \item \term{Entropía}: la información \emph{promedio} por símbolo, o sea la ``sorpresa promedio'':
+        \[ H(S) = \sum_i p_i \log_2 \frac{1}{p_i} \]
+  \item Propiedades: $0 \le H(S) \le \log_2 n$. Vale $0$ si un símbolo es seguro, y es máxima cuando todos son equiprobables
+        (no se puede adivinar nada). Una moneda justa tiene $H = 1$ bit; una cargada, menos.
+\end{itemize}
+
+\subsection{Codificación: comprimir}
+\begin{idea}[La idea: el código Morse]
+En Morse la E (la letra más común) es un solo punto, y las letras raras son largas. Asignar
+\textbf{códigos cortos a lo frecuente} achica el mensaje promedio.
+\end{idea}
+\begin{itemize}
+  \item Un código útil tiene que ser \term{unívocamente decodificable}; mejor aún, \term{instantáneo} (se decodifica sin mirar adelante).
+  \item \term{Condición de prefijo}: es instantáneo \emph{sii} ninguna palabra es prefijo de otra.
+  \item \term{Longitud media}: $L = \sum p_i L_i$. \textbf{Teorema de fuente}: $L \ge H$. No se puede comprimir por debajo de la entropía.
+  \item \term{Huffman}: juntar repetidamente los dos símbolos menos probables en un árbol (izquierda 0, derecha 1). Da un código prefijo óptimo.
+        Ej.: ``MI MAMA ME MIMA'' ocupa 33 bits con Huffman contra 120 en ASCII.
+\end{itemize}
+
+\subsection{El canal real: ruido y perturbaciones}
+\begin{itemize}
+  \item \term{Atenuación}: la señal se debilita con la distancia, y más a frecuencias altas. Se compensa con amplificadores y ecualización.
+  \item \term{Distorsión de retardo} (medios guiados): cada frecuencia viaja a distinta velocidad y las componentes llegan desfasadas.
+  \item \term{Ruido}: señal que se suma y no es mía.
+    \begin{itemize}
+      \item \emph{Térmico}: agitación de los electrones, inevitable y parejo en todas las frecuencias (``blanco''): $N = kTB$. \textbf{A más ancho de banda, más ruido.}
+      \item \emph{Intermodulación}: el medio no es lineal y aparecen frecuencias suma/diferencia.
+      \item \emph{Diafonía} (crosstalk): un cable ``se escucha'' en el de al lado.
+      \item \emph{Impulsivo}: picos cortos y grandes (una tormenta). Es el peor para los datos.
+    \end{itemize}
+  \item En digital, el ruido se traduce en bits cambiados: \term{BER} (Bit Error Rate).
+\end{itemize}
+
+\subsection{¿Cuántos bits por segundo entran? Nyquist y Shannon}
+\begin{idea}
+Imaginá que codificás bits con \textbf{niveles de voltaje}. Hay dos límites:
+(1) qué tan \textbf{seguido} puedo cambiar de nivel, que lo fija el ancho de banda, y
+(2) cuántos niveles \textbf{distingo} sin confundirlos, que lo fija el ruido.
+\end{idea}
+\begin{itemize}
+  \item \term{Nyquist} (canal \emph{sin} ruido): en un canal de ancho $B$ la señal puede cambiar a lo sumo $2B$ veces por segundo. Con $M$ niveles cada cambio lleva $\log_2 M$ bits:
+        \[ C = 2B\log_2 M \ \text{bps} \]
+        Sin ruido, con más niveles tendría velocidad infinita.
+  \item \term{Baudio} = cambios de señal (símbolos) por segundo. bps = baudios $\times$ bits por símbolo.
+  \item \term{Shannon} (canal \emph{con} ruido): el ruido no deja distinguir niveles muy juntos. El techo absoluto es
+        \[ C_{max} = B\log_2(1+\text{SNR}) \qquad \text{SNR} = \frac{P_{\text{señal}}}{P_{\text{ruido}}},\ \ \text{SNR}_{dB} = 10\log_{10}\text{SNR} \]
+        Ej.: línea telefónica, $B = 3000$ Hz y SNR $= 30$ dB ($=1000$), da $C \approx 3000\cdot\log_2 1001 \approx 30$ kbps.
+  \item Teorema de canal: si transmito a una tasa $R < C$, \emph{existe} un código que hace el error tan chico como quiera; si $R > C$, no hay forma. Shannon no dice \emph{cómo} construir ese código.
+  \item Subir $B$ no ayuda para siempre, porque también sube el ruido ($N = N_0 B$): la capacidad se satura. Subir la potencia aumenta las no linealidades.
+\end{itemize}
+\begin{clave}
+Nyquist dice \emph{cuántos niveles harían falta}; Shannon pone el \emph{techo} por el ruido. La capacidad real es la menor de las dos.
+Entropía = sorpresa promedio = mínimo de bits por símbolo para comprimir.
+\end{clave}
+
+%====================================================================
+\section{Nivel Físico II: medios, multiplexación y modulación}
+
+\subsection{Medios de transmisión}
+\begin{itemize}
+  \item \textbf{Guiados} (la señal va ``encerrada''):
+    \begin{itemize}
+      \item \term{Par trenzado}: dos cables de cobre enroscados. El trenzado cancela interferencias y diafonía. Barato; es el típico cable de red.
+      \item \term{Coaxial}: un conductor central blindado. Usado en la TV por cable (CATV).
+      \item \term{Fibra óptica}: luz que rebota adentro de un vidrio muy puro (\emph{reflexión total interna}). Casi no se atenúa y es inmune a interferencias eléctricas.
+            \emph{Monomodo} (un solo camino de luz, para larga distancia) vs \emph{multimodo} (más barata, corta distancia).
+    \end{itemize}
+  \item \textbf{No guiados} (por el aire): radio, microondas, infrarrojo, láser, satélite, Li-Fi (datos codificados en el parpadeo de LEDs).
+\end{itemize}
+
+\subsection{Multiplexar: compartir un medio}
+\begin{idea}[La idea: una autopista]
+Tengo \emph{un} cable caro y muchas conversaciones. \textbf{FDM}: cada una va por su carril (su banda de frecuencias), todas al mismo tiempo, como las radios FM.
+\textbf{TDM}: todas usan la autopista entera pero por turnos (round-robin).
+\end{idea}
+\begin{itemize}
+  \item \term{FDM}: cada usuario tiene una porción de frecuencias \emph{todo el tiempo}. Requiere electrónica analógica.
+  \item \term{TDM}: cada usuario usa \emph{todo} el ancho de banda en su turno. Sólo sirve para señales digitales, pero es simple y barato. Es lo que usa la telefonía digital.
+  \item \term{WDM}: FDM en fibra, con un ``color'' (longitud de onda) por canal.
+  \item \term{Multiplexación estadística} (redes de paquetes): TDM \emph{bajo demanda}. Nadie tiene turno fijo: el que tiene datos los manda y, si el enlace está ocupado, espera en una cola.
+        Si la cola se llena hay \term{congestión}.
+\end{itemize}
+\textbf{Red telefónica (PSTN)}: \emph{local loop} analógico (par trenzado hasta tu casa), troncales digitales (fibra), centrales de conmutación.
+Es \term{conmutación de circuitos}: durante la llamada tenés un camino reservado para vos.
+
+\subsection{Pasar de analógico a digital: PCM}
+\begin{idea}[La idea: fotos de una señal]
+Para digitalizar la voz le saco ``fotos'' (muestras) cada tanto y anoto cada una como un número.
+¿Cada cuánto? Si saco pocas fotos pierdo detalle (como las ruedas de los autos que en las películas parecen girar al revés).
+\end{idea}
+\begin{itemize}
+  \item \term{Teorema de muestreo (Nyquist)}: para reconstruir una señal cuya frecuencia máxima es $f_m$, hay que muestrear a \textbf{$f_s > 2 f_m$}.
+        CD: 44,1 kHz sirve para audio de hasta 22 kHz. Voz telefónica (hasta 4 kHz): 8000 muestras/s.
+  \item Dos pasos: \term{muestreo} (da pulsos de altura variable, PAM) y \term{cuantificación} (redondear cada pulso a un número de $n$ bits). El redondeo introduce \emph{error de cuantificación}.
+  \item \term{PCM} de voz: 8000 muestras/s $\times$ 8 bits $=$ \textbf{64 kbps} por canal, una muestra cada 125 $\mu$s.
+  \item \term{T1} (EE.UU.): 24 canales $\times$ 8 bits $+$ 1 bit de sincronismo $=$ 193 bits cada 125 $\mu$s $=$ 1,544 Mbps.
+        \term{E1} (Europa): 32 canales, 2,048 Mbps.
+  \item \term{Códec} (analógico $\to$ digital) $\neq$ \term{Módem} (digital $\to$ analógico, para mandar bits por un medio analógico).
+\end{itemize}
+
+\subsection{Modulación: meter bits en una onda}
+\begin{idea}
+Tomo una senoide ``portadora'' y muevo una de sus perillas según el bit que quiero mandar.
+\end{idea}
+\begin{itemize}
+  \item \term{ASK}: cambio la \emph{amplitud} (fuerte = 1, débil o nada = 0).
+  \item \term{FSK}: cambio la \emph{frecuencia} (aguda = 1, grave = 0).
+  \item \term{PSK}: cambio la \emph{fase} (sin corrimiento = 0, invertida = 1).
+  \item \textbf{Multinivel}: si uso 4 fases distintas, cada símbolo lleva 2 bits (QPSK). En general, con $S$ símbolos posibles: \[V_{t} = V_{m}\cdot\log_2 S \qquad (\text{bps} = \text{baudios} \times \text{bits por símbolo})\]
+  \item \term{QAM}: combino amplitud \emph{y} fase. Cada combinación es un punto en un dibujo llamado \term{constelación}. 16-QAM lleva 4 bits por símbolo, 64-QAM 6 y 256-QAM 8.
+\end{itemize}
+\begin{ojo}[La otra cara de la moneda]
+Más puntos en la constelación implica puntos más juntos, y entonces el ruido los confunde más fácil: \textbf{más BER} con la misma SNR.
+Por eso no puedo subir niveles para siempre. Es Shannon otra vez.
+\end{ojo}
+
+\subsection{Codificación de línea: bits como voltajes}
+\begin{idea}
+Si mando bits ``crudos'' como alto/bajo, una tira larga de ceros es una línea plana, y el receptor pierde la cuenta de cuántos bits pasaron
+(\term{pierde el reloj}). Las codificaciones de línea meten \textbf{transiciones} para que el receptor se sincronice.
+\end{idea}
+\begin{center}
+\begin{tikzpicture}[x=0.95cm,y=0.5cm,font=\small]
+\foreach \b [count=\i from 0] in {1,0,1,1,0,0,0,1} {
+  \node at (\i+0.5,7.3) {\b};
+  \draw[gray!40] (\i,-0.3) -- (\i,6.9);
+}
+\draw[gray!40] (8,-0.3) -- (8,6.9);
+\node[left] at (0,5.5) {NRZ};
+\draw[azul,thick] (0,6)--(1,6)--(1,5)--(2,5)--(2,6)--(4,6)--(4,5)--(7,5)--(7,6)--(8,6);
+\node[left] at (0,3) {NRZI};
+\draw[azul,thick] (0,2.5)--(0,3.5)--(2,3.5)--(2,2.5)--(3,2.5)--(3,3.5)--(7,3.5)--(7,2.5)--(8,2.5);
+\node[left] at (0,0.5) {Manchester};
+\draw[azul,thick] (0,0)--(0.5,0)--(0.5,1)--(1.5,1)--(1.5,0)--(2.5,0)--(2.5,1)--(3,1)--(3,0)--(3.5,0)--(3.5,1)--(4.5,1)--(4.5,0)--(5,0)--(5,1)--(5.5,1)--(5.5,0)--(6,0)--(6,1)--(6.5,1)--(6.5,0)--(7.5,0)--(7.5,1)--(8,1);
+\end{tikzpicture}
+\end{center}
+\begin{itemize}
+  \item \term{NRZ}: 1 = alto, 0 = bajo. Simple, pero con muchos bits iguales seguidos no hay transiciones y se pierde el sincronismo.
+  \item \term{NRZI}: un 1 es una \emph{transición}, un 0 es quedarse igual. Resuelve muchos 1 seguidos, no muchos 0.
+  \item \term{Manchester}: siempre hay una transición \emph{en el medio} de cada bit (subir = 1, bajar = 0). El reloj viene incluido,
+        pero la señal cambia el doble de rápido: \textbf{baud rate $=$ 2 $\times$ bit rate}, es decir 50\% de eficiencia. Lo usa Ethernet de 10 Mbps.
+  \item \term{Manchester diferencial}: 0 = hay transición al \emph{inicio} del bit, 1 = no hay (en el medio siempre hay).
+  \item \libro{} \term{4B/5B}: cada 4 bits se mandan como 5, elegidos para que nunca haya muchos ceros seguidos, y después NRZI. Eficiencia del 80\%.
+\end{itemize}
+
+%====================================================================
+\section{Nivel de Enlace: punto a punto}
+
+\begin{idea}
+El nivel físico me da un ``caño'' que lleva bits en orden pero \textbf{a veces se equivoca}. El nivel de enlace arma
+\textbf{tramas} (paquetitos) y se encarga de detectar errores y, si hace falta, de retransmitir.
+\end{idea}
+
+\subsection{Framing}
+¿Dónde empieza y termina cada trama dentro de un chorro de bits? Hay tres opciones: largo fijo, largo escrito en el header,
+o \term{delimitadores} (una secuencia especial, como en PPP \texttt{01111110}). Si esa secuencia aparece en los datos se hace
+\term{bit stuffing}: \libro{} después de cinco 1 seguidos se inserta un 0, y el receptor lo saca.
+
+\textbf{Tipos de servicio}: sin conexión y sin ACK / sin conexión con ACK / orientado a conexión.
+
+\subsection{Detectar y corregir errores}
+\begin{idea}
+Agrego bits \textbf{redundantes} para que un error ``se note'': $m$ bits de datos $+$ $r$ de redundancia forman una \emph{codeword} de $n$ bits.
+Si las codewords válidas están ``lejos'' entre sí, cambiar pocos bits cae en algo inválido.
+\end{idea}
+\begin{itemize}
+  \item \term{Distancia de Hamming}: cuántos bits difieren entre dos palabras. $d$ es la mínima entre todas las codewords del código.
+  \item Para \textbf{detectar} $e$ errores: $d \ge e+1$. Para \textbf{corregir} $e$ errores: $d \ge 2e+1$ (la palabra recibida tiene que quedar más cerca de la original que de cualquier otra).
+  \item \libro{} En la práctica: paridad, \emph{checksum} de Internet (suma en complemento a 1, lo usan IP/TCP/UDP) y \term{CRC} (división de polinomios, muy bueno con ráfagas de errores; lo usa Ethernet).
+\end{itemize}
+
+\subsection{Transmisión confiable: Stop \& Wait y ventana deslizante}
+\textbf{Stop \& Wait}: mando una trama y espero su \term{ACK}; si vence un \emph{timeout}, la reenvío.
+\begin{itemize}
+  \item Si se pierde el ACK, reenvío y el receptor recibe un duplicado (\term{reencarnación}). Por eso se \textbf{numeran} las tramas; en S\&W alcanza con 2 números (0 y 1).
+  \item Problema: me paso casi todo el tiempo \emph{esperando}. \term{Eficiencia} $\eta = T_{tx}/\text{RTT}$.
+\end{itemize}
+
+\begin{idea}[La idea: llenar el caño]
+El cable es un caño largo. Si mando una trama y espero, el caño está casi vacío. El \term{producto delay $\times$ ancho de banda}
+(\term{capacidad de volumen}, $C_{vol} = V_{tx}\cdot\text{Delay}$) dice cuántos bits ``entran'' en el caño. Para aprovecharlo tengo que mandar
+tramas hasta que vuelva el primer ACK, es decir durante un RTT.
+\end{idea}
+\textbf{Sliding window}: mando varias tramas sin esperar.
+\begin{itemize}
+  \item Ventana de emisión: $\text{SWS} = \dfrac{V_{tx}\cdot \text{RTT}}{|\text{Frame}|}$ tramas. Puedo mandar si ÚltimoEnviado $\le$ ÚltimoReconocido $+$ SWS.
+  \item \term{ACK acumulativo} (Go-Back-N): ``recibí todo hasta $n$''. El receptor no guarda tramas fuera de orden (RWS $=1$); si se pierde una, se reenvía desde ahí.
+  \item \term{ACK selectivo} (Selective Repeat): el receptor guarda las fuera de orden (RWS $=$ SWS) y sólo se reenvía lo perdido.
+  \item Para no confundir reencarnaciones: \textbf{cantidad de números de secuencia $\ge$ SWS $+$ RWS}.
+\end{itemize}
+\begin{clave}
+$d\ge e+1$ detecta, $d\ge 2e+1$ corrige. S\&W es ineficiente con RTT grande; la ventana tiene que cubrir delay $\times$ BW; \#seq $\ge$ SWS $+$ RWS.
+\end{clave}
+
+%====================================================================
+\section{Nivel de Enlace: medios compartidos (MAC)}
+
+\begin{idea}[La idea: una mesa de gente charlando]
+Muchos hosts comparten un mismo cable (o el aire). Si dos hablan a la vez, no se entiende nada (\textbf{colisión}).
+No hay un moderador: cada uno tiene que seguir reglas de cortesía. Esas reglas son el \term{protocolo MAC} (Medium Access Control).
+\end{idea}
+Objetivos: maximizar las transmisiones exitosas y que todos tengan oportunidades parecidas (\emph{fairness}).
+
+\subsection{De ALOHA a Ethernet}
+\begin{itemize}
+  \item \term{ALOHA} (Hawaii, 1970): ``hablo cuando quiero; si no me contestan, espero un rato al azar y repito''. Aprovecha como mucho el \textbf{18\%} del canal. \libro{} Slotted ALOHA (hablar sólo al inicio de un turno): 37\%.
+  \item \term{CSMA} (\emph{Carrier Sense}): ``escucho antes de hablar''. Si está ocupado: \emph{1-persistente} (espero a que se libere y hablo enseguida, como Ethernet) o \emph{p-persistente} (hablo con probabilidad $p$).
+  \item \term{CSMA/CD} (Ethernet 802.3): además, \emph{mientras hablo escucho}. Si detecto una colisión corto, mando una señal de \emph{jam} y espero.
+\end{itemize}
+
+\begin{ojo}[Por qué Ethernet tiene trama mínima]
+Para detectar una colisión tengo que \textbf{seguir transmitiendo} hasta que la colisión pueda volver a mí. En el peor caso (A y B en los extremos),
+eso tarda $2\cdot T_{prop}$. Si la trama es más corta, termino de mandar antes de enterarme y creo que salió bien.
+Ethernet 10 Mbps: trama mínima de 512 bits (64 bytes). Esto limita el largo de la red (2500 m, 4 repetidores).
+\end{ojo}
+\begin{itemize}
+  \item \term{Exponential backoff}: después de la $k$-ésima colisión, elijo al azar un número de slots entre $0$ y $2^k-1$. Cuantas más colisiones, más me abro (\libro{} tope $k=10$, abandono a los 16 intentos).
+  \item Trama Ethernet: preámbulo (8 B) $|$ destino (6) $|$ origen (6) $|$ tipo/largo (2) $|$ datos (46--1500) $|$ CRC (4).
+  \item CSMA escala mal: con mucha carga, colisiona todo el tiempo.
+  \item \term{802.2 LLC}: subcapa encima de las distintas MAC (802.3, 802.11, \dots) que las unifica y ofrece los 3 tipos de servicio.
+\end{itemize}
+
+\subsection{Crecer: bridges, switches, STP y VLANs}
+\begin{itemize}
+  \item Dispositivos por capa: \textbf{físico}: repetidores y hubs (repiten todo); \textbf{enlace}: bridges y switches (miran la MAC); \textbf{red}: routers.
+  \item \term{Dominio de colisión}: quiénes pueden chocar entre sí; lo corta un switch/bridge (un hub no).
+        \term{Dominio de broadcast}: a quiénes llega un broadcast; lo corta un router (o una VLAN).
+  \item \term{Learning bridge}: mira la MAC \emph{origen} de cada trama y anota ``esta MAC está en este puerto''. Después reenvía sólo por donde hace falta.
+        Si no conoce el destino, \textbf{inunda} (manda por todos lados). Los broadcast siempre se inundan.
+\end{itemize}
+\begin{idea}[Spanning Tree: sacar los ciclos]
+Si hay caminos redundantes entre bridges, una trama inundada da vueltas \textbf{para siempre}. STP apaga algunos puertos para que la red quede como un \textbf{árbol} (sin ciclos), pero si se cae un enlace los reactiva.
+\end{idea}
+\begin{enumerate}
+  \item Se elige un \term{root} (el de menor ID).
+  \item Cada switch calcula su distancia al root. Su \term{root port} es el puerto que más cerca lo deja del root.
+  \item En cada LAN, el switch más cercano al root es el que reenvía por ella: su puerto es el \term{designated port}.
+  \item Todo lo demás queda \textbf{bloqueado}. Se intercambian \term{BPDUs} periódicamente (``soy el 3, creo que el root es el 2, estoy a distancia 1'').
+\end{enumerate}
+\textbf{``El broadcast no escala''}: una LAN gigante tiene broadcasts por todos lados. Las \term{VLANs} parten una LAN física en varias \emph{lógicas}
+(cada una su propio dominio de broadcast). Entre switches se usa \term{trunking 802.1Q}: se agrega un tag de 4 bytes con el ID de VLAN.
+
+\subsection{Wireless (802.11)}
+\begin{itemize}
+  \item Más ruido y errores, batería limitada y cualquiera puede escuchar (hay que cifrar). Bandas licenciadas (ENACOM) vs \textbf{no licenciadas} (ISM: potencia limitada y mucha interferencia), de ahí el \emph{spread spectrum} (saltar de frecuencia, FHSS, idea de Hedy Lamarr).
+  \item \term{Estación oculta}: A le habla a B; C no oye a A (está lejos), cree que el medio está libre, habla y arruina la recepción en B.
+  \item \term{Estación expuesta}: B le habla a A; C oye a B y se calla, aunque podría hablarle a D sin molestar a nadie.
+  \item En wireless no se puede escuchar mientras se transmite, y la colisión importa en el receptor, no en el emisor: \textbf{no hay CD}.
+        Se usa \term{CSMA/CA}: escucho; si está libre espero un \emph{IFS}; si está ocupado espero a que termine y además un \emph{backoff} aleatorio
+        (el contador se congela si el medio se ocupa). El receptor manda \textbf{ACK}; sin ACK asumo colisión y reintento.
+        \libro{} Opcional: \textbf{RTS/CTS} (pido permiso; todos los que oyen el ``CTS'' del receptor se callan), que ataca la estación oculta.
+\end{itemize}
+\begin{clave}
+Trama mínima $\leftrightarrow 2T_{prop}$. Backoff exponencial. Switch corta colisión, router/VLAN corta broadcast. STP: root, root port, designated, bloqueado. Wireless: CA en vez de CD por oculta/expuesta.
+\end{clave}
+
+%====================================================================
+\section{Nivel de Red: datagramas vs circuitos virtuales}
+
+\begin{idea}
+Un \term{switch} (en sentido amplio) recibe paquetes por un puerto y decide por cuál sacarlos. Hay dos filosofías:
+\textbf{datagramas} (cada paquete es una carta con la dirección completa, como el correo) y \textbf{circuitos virtuales}
+(primero ``llamo'' y armo un camino, y después todos los paquetes lo siguen, como una llamada telefónica).
+\end{idea}
+\begin{center}\small
+\begin{tabular}{p{3.2cm}p{5.6cm}p{5.6cm}}
+\toprule
+ & \textbf{Datagramas} (IP) & \textbf{Circuito virtual} (X.25, Frame Relay, ATM) \\
+\midrule
+Setup & No hace falta: mando cuando quiero & Hay que armarlo (1 RTT) y después cerrarlo \\
+Dirección & Cada paquete lleva la dirección completa & Sólo un número chico: el \term{VCI} \\
+Estado en switches & Ninguno & Una entrada por circuito: (puerto, VCI) de entrada $\to$ (puerto, VCI) de salida \\
+Ruteo & Cada paquete por su cuenta & Se elige al armar el circuito \\
+Si cae un switch & Se rutea por otro lado & Se caen todos sus circuitos \\
+QoS y congestión & Difícil & Fácil: se reservan recursos al armar \\
+\bottomrule
+\end{tabular}
+\end{center}
+El VCI tiene significado \emph{local} a cada enlace (se reescribe en cada salto: \emph{label switching}). \term{PVC}: lo arma el administrador. \term{SVC}: se arma por señalización cuando se necesita.
+
+%====================================================================
+\section{Nivel de Red: IP}
+
+\begin{idea}
+IP es el ``idioma común'' que permite unir redes distintas (Ethernet, WiFi, fibra\dots) en \textbf{una sola Internet}.
+Promete poco a propósito: \term{best effort}. Hace lo que puede, sin garantías. La inteligencia queda en los extremos (TCP).
+\end{idea}
+\begin{itemize}
+  \item Servicio sin conexión: los paquetes se pueden \textbf{perder, desordenar, duplicar y demorar} sin límite.
+  \item \textbf{Header IPv4} (20 bytes, hasta 60 con opciones), los campos que importan:
+    \begin{itemize}
+      \item \emph{Versión}, \emph{HLen} (largo del header en palabras de 32 bits), \emph{TOS}/DiffServ-ECN (calidad de servicio), \emph{Longitud total} (máximo 65535).
+      \item \emph{Ident, Flags (DF, MF), Offset}: para fragmentar.
+      \item \term{TTL}: se resta 1 en cada router y en 0 se descarta. Evita que un paquete dé vueltas para siempre.
+      \item \emph{Protocol}: a quién le entrego los datos (1 ICMP, 6 TCP, 17 UDP, 89 OSPF).
+      \item \emph{Checksum}: \textbf{sólo del header}. \emph{Origen} y \emph{destino}: 32 bits cada una.
+    \end{itemize}
+\end{itemize}
+
+\subsection{Fragmentación}
+Cada tecnología de enlace tiene un tamaño máximo, el \term{MTU} (Ethernet 1500 B, FDDI 4500 B). Si un router tiene que mandar un paquete más grande que el MTU de la red siguiente, lo \textbf{parte}.
+\begin{itemize}
+  \item Todos los fragmentos tienen el mismo \emph{Ident}; todos menos el último llevan \emph{MF}$=1$; el \emph{offset} se cuenta en unidades de \textbf{8 bytes}.
+  \item Se \textbf{reensambla sólo en el destino} (no en routers intermedios). Si se pierde un fragmento, se pierde todo el datagrama (IP no recupera nada).
+  \item Toda red tiene que aceptar al menos 68 bytes. \libro{} Hoy se evita fragmentar: se manda con DF$=1$ y se descubre el MTU del camino (\emph{Path MTU Discovery}).
+\end{itemize}
+
+\subsection{Direcciones y forwarding}
+\begin{itemize}
+  \item Dirección de 32 bits ($\approx$ 4300 millones), única y \textbf{jerárquica}: una parte identifica la \emph{red} y otra el \emph{host} (como calle y número). Notación: \texttt{157.92.x.x}.
+  \item Esquema original \emph{classful} (clases A, B, C, de tamaños fijos): desperdiciaba direcciones y agrandaba las tablas.
+        \libro{} Se reemplazó por \term{CIDR}: prefijos de cualquier largo (\texttt{/n}), agregación de rutas, y se elige la ruta con el prefijo más largo que coincida (\emph{longest prefix match}). Ej.: UBA $=$ \texttt{157.92/16}.
+  \item \term{Direcciones privadas} (RFC 1918): \texttt{10/8}, \texttt{172.16/12}, \texttt{192.168/16}. No salen a Internet (\libro{} se usan detrás de NAT).
+  \item \term{Forwarding}: si el destino está en una red a la que estoy conectado, se lo entrego directo; si no, busco en mi tabla el \emph{next hop}; si no está, lo mando al \term{default router}.
+        Un host común sólo sabe ``¿es de mi red? directo : al default router''.
+  \item \libro{} Para entregar directo necesito la MAC del destino: \term{ARP}. Los errores (TTL vencido, destino inalcanzable) se informan con \term{ICMP} (así funcionan \texttt{ping} y \texttt{traceroute}).
+  \item \term{IPv6}: 128 bits (\texttt{8000:0000:\dots:CDEF}). Header fijo y más simple (sin checksum y sin fragmentación en routers).
+\end{itemize}
+
+%====================================================================
+\section{Nivel de Red: ruteo}
+
+\begin{idea}
+\textbf{Forwarding} es mirar la tabla y sacar el paquete por un puerto (rápido, paquete a paquete).
+\textbf{Routing} es \emph{armar} esa tabla: encontrar los caminos más baratos en un grafo que cambia, con un algoritmo distribuido.
+\end{idea}
+\begin{itemize}
+  \item Ruteo \emph{estático} (configurado a mano) vs \emph{dinámico} (se adapta a fallas y carga).
+  \item Internet es un conjunto de \term{Sistemas Autónomos} (AS): redes con una sola administración (un ISP, una universidad).
+        Adentro de un AS se usa un protocolo \textbf{intradominio} (RIP, OSPF); entre AS, uno \textbf{interdominio} (BGP). Cada AS esconde sus detalles internos.
+\end{itemize}
+
+\subsection{Vector de distancia (RIP)}
+\begin{idea}[La idea: rumores entre vecinos]
+Cada router le cuenta a sus \textbf{vecinos} ``yo llego a X con costo tanto''. Cada uno se queda con la mejor opción:
+``si mi vecino llega a G en 12 y yo llego a él en 6, yo llego a G en 18 pasando por él''. Nadie conoce el mapa entero.
+\end{idea}
+\begin{itemize}
+  \item Cada nodo tiene (Destino, Costo, NextHop) hacia \emph{todos}. Manda \textbf{su tabla entera, sólo a sus vecinos}, periódicamente y cuando algo cambia.
+  \item Es Bellman-Ford distribuido: $D_x(y) = \min_v \{ c(x,v) + D_v(y) \}$.
+  \item Las buenas noticias viajan rápido y las malas lento: \term{conteo a infinito}. Si se cae un enlace, A y C se creen mutuamente (``C dice que llega en 2, entonces yo llego en 3'') y el costo sube de a poco sin fin.
+  \item Parches: \textbf{infinito $=$ 16}; \term{split horizon} (no le anuncio una ruta al vecino del que la aprendí); \term{poison reverse} (se la anuncio con costo $\infty$). Sólo arreglan ciclos de 2 nodos.
+  \item \term{RIP}: costo $=$ cantidad de saltos (1 a 15; 16 $=\infty$, así que sirve sólo para redes chicas). Corre sobre \textbf{UDP, puerto 520}.
+\end{itemize}
+
+\subsection{Estado de enlace (OSPF)}
+\begin{idea}[La idea: cada uno publica su pedacito de mapa]
+Cada router le cuenta a \textbf{toda la red} sólo \emph{quiénes son sus vecinos y cuánto cuesta llegar a cada uno}. Con los pedacitos de todos,
+cada router arma el \textbf{mapa completo} y calcula los caminos con Dijkstra.
+\end{idea}
+\begin{itemize}
+  \item Pasos: descubrir vecinos $\to$ medir costos $\to$ armar un \term{LSP} (ID, costos a vecinos, \textbf{número de secuencia}, \textbf{TTL}) $\to$ inundarlo $\to$ Dijkstra.
+  \item \term{Inundación confiable}: guardo el LSP más nuevo de cada router (por número de secuencia), lo reenvío a todos menos al que me lo dio, confirmo con ACK y descarto los viejos (TTL).
+  \item \term{Dijkstra} (\emph{forward search}): listas \emph{Tentativo} y \emph{Confirmado}. Confirmo el tentativo más barato y con su LSP actualizo a sus vecinos.
+  \item \textbf{DV vs LS}: en DV cada uno le cuenta a sus vecinos todo lo que sabe (puede ser inestable). En LS cada uno le cuenta a todos lo de sus vecinos: es estable, converge rápido y todos ven lo mismo, pero usa más memoria y CPU.
+  \item \textbf{Métricas} (ARPANET): primero largo de la cola; después retardo medido (oscilaba); finalmente utilización del enlace con un rango acotado.
+  \item \term{OSPF}: LS abierto, directo sobre IP (protocolo 89). Mensajes autenticados, varios caminos de igual costo (balancea), métricas por tipo de servicio.
+        Es \textbf{jerárquico}: se divide en \emph{áreas} más un \emph{área troncal}; los LSPs no salen de su área. Se \textbf{cambia optimalidad por escalabilidad} (esconder información puede dar caminos no óptimos).
+        Mensajes: Hello, Database Description, LS Request, LS Update, LS Ack.
+\end{itemize}
+
+\subsection{Entre sistemas autónomos: BGP}
+\begin{itemize}
+  \item \term{EGP} (viejo): suponía Internet con forma de árbol y sólo miraba alcanzabilidad.
+  \item \term{BGP}: no exige árbol. Tipos de AS: \term{stub} (una sola conexión, sólo tráfico propio), \term{multihomed} (varias conexiones pero no deja pasar tráfico ajeno), \term{transit} (lleva tráfico propio y de terceros).
+  \item Cada AS tiene un \emph{speaker} BGP que anuncia ``estas redes se alcanzan por el camino AS1, AS2, \dots''. Se anuncia el \textbf{camino completo de AS} (\libro{} \emph{path vector}: así se detectan loops y cada AS aplica sus \textbf{políticas} comerciales, no sólo ``el más corto''). Las rutas se pueden retirar. \libro{} Va sobre TCP (puerto 179).
+  \item \term{NAPs/IXPs}: puntos donde muchas redes intercambian tráfico directamente (en Argentina, CABASE). Abaratan y mejoran la calidad, porque el tráfico local no sale al exterior.
+\end{itemize}
+\begin{clave}
+DV: tabla entera a vecinos, Bellman-Ford, conteo a infinito (16, split horizon, poison reverse), RIP.
+LS: vecinos a todos, Dijkstra, estable, OSPF jerárquico (optimalidad por escala). BGP: entre AS, caminos de AS y políticas.
+\end{clave}
+
+%====================================================================
+\section{Nivel de Transporte: UDP y TCP}
+
+\begin{idea}
+IP lleva paquetes de \emph{host} a \emph{host}, sin garantías. Transporte lleva datos de \emph{proceso} a \emph{proceso} (con \textbf{puertos}),
+y TCP además construye, sobre esa red poco confiable, una \textbf{conexión confiable}: todo llega, en orden y una sola vez.
+\end{idea}
+¿Por qué no alcanza la ventana del nivel de enlace? Porque acá la otra punta puede estar en cualquier lado: el RTT es distinto y cambia (timeouts adaptativos), pueden aparecer paquetes muy viejos,
+el receptor puede ser lento (control de flujo) y la red se puede congestionar (control de congestión).
+
+\subsection{UDP}
+Casi nada: agrega \textbf{puertos} (para saber a qué proceso va) y un checksum opcional. \libro{} Header de 8 bytes. Sin conexión y sin garantías.
+Se usa cuando importa más la rapidez que la confiabilidad: audio/video en vivo (RTP), DNS, RIP.
+
+\subsection{TCP: qué ofrece}
+\begin{itemize}
+  \item \textbf{Orientado a conexión}, \textbf{full duplex}, \textbf{flujo de bytes}: la app escribe bytes, TCP los corta en segmentos, la app del otro lado lee bytes (no se respetan los ``mensajes'').
+  \item \textbf{Confiable}: números de secuencia, ACKs, checksum y retransmisión por timeout.
+  \item \term{Control de flujo}: no ahogar al \emph{receptor}. \term{Control de congestión}: no ahogar a la \emph{red} (se ve en otra clase).
+  \item Una conexión se identifica por la \textbf{4-tupla} (IP origen, puerto origen, IP destino, puerto destino).
+  \item \term{MSS}: máximo de datos por segmento (default 536; en Ethernet $1500-20-20=1460$). Se manda un segmento cuando junto un MSS, cuando vence un timer, o cuando la app hace \emph{push}.
+  \item \textbf{Header} (20 bytes $+$ opciones): puertos; \term{SequenceNum} (número del \emph{primer byte} que va en el segmento); \term{Acknowledgment} (el \emph{próximo byte que espero}, acumulativo);
+        flags \texttt{SYN, ACK, FIN, RST, PSH, URG}; \term{AdvertisedWindow} (16 bits); checksum (incluye un pseudo-header con las IPs).
+\end{itemize}
+
+\subsection{Abrir y cerrar}
+\begin{itemize}
+  \item \term{3-way handshake}: \texttt{SYN} $\to$ \texttt{SYN+ACK} $\to$ \texttt{ACK}. Cada lado elige su número de secuencia inicial (\libro{} aleatorio, para no confundirse con conexiones viejas).
+  \item \textbf{Cierre en 4 pasos}: \texttt{FIN}, \texttt{ACK}, \texttt{FIN}, \texttt{ACK}. Cada dirección se cierra por separado.
+  \item \textbf{Estados}: CLOSED, LISTEN, SYN\_SENT, SYN\_RCVD, ESTABLISHED, FIN\_WAIT\_1, FIN\_WAIT\_2, CLOSE\_WAIT, LAST\_ACK, CLOSING y TIME\_WAIT.
+  \item \term{TIME\_WAIT}: quien cierra primero espera \textbf{2 $\times$ MSL} (el doble de lo máximo que vive un paquete) antes de olvidar la conexión: así mueren los segmentos viejos y puede reenviar el último ACK si se perdió.
+\end{itemize}
+
+\subsection{Ventana deslizante y control de flujo}
+\begin{idea}[La idea: el balde del receptor]
+El receptor tiene un balde (buffer). En cada ACK le avisa al emisor cuánto lugar le queda (\textbf{AdvertisedWindow}), y el emisor nunca tiene ``en vuelo'' más que eso.
+\end{idea}
+\[ \text{AdvertisedWindow} = \text{MaxRcvBuffer} - (\text{LastByteRcvd} - \text{LastByteRead}) \]
+\[ \text{EffectiveWindow} = \text{AdvertisedWindow} - (\text{LastByteSent} - \text{LastByteAcked}) \]
+\begin{itemize}
+  \item Emisor: LastByteAcked $\le$ LastByteSent $\le$ LastByteWritten. Receptor: LastByteRead $<$ NextByteExpected $\le$ LastByteRcvd$+1$ (si hay un hueco, NextByteExpected apunta al hueco).
+  \item Retransmite estilo Go-Back-N con ACK acumulativo (\libro{} hay una extensión SACK para ACKs selectivos).
+  \item Si la ventana llega a 0, el emisor manda cada tanto un \emph{window probe} de 1 byte (\term{persist timer}). Si no, el ACK que reabre la ventana se podría perder y los dos quedarían esperando para siempre.
+\end{itemize}
+
+\subsection{¿Cuánto esperar antes de retransmitir? (RTO)}
+\begin{idea}
+Si espero poco, retransmito cosas que no se perdieron; si espero mucho, tardo en recuperarme. Y el RTT en Internet \textbf{varía muchísimo}.
+Solución: ir \textbf{estimando} el RTT y su variación, y poner el timeout un poco por encima.
+\end{idea}
+\begin{itemize}
+  \item \textbf{Original}: $\text{EstRTT} = \alpha\,\text{EstRTT} + (1-\alpha)\,\text{Sample}$ (promedio que ``recuerda''), y timeout $= 2\cdot\text{EstRTT}$.
+  \item \term{Karn/Partridge}: si retransmití, no sé si el ACK es del original o de la copia, así que \textbf{no mido} esos RTT. Y en cada retransmisión \textbf{duplico} el timeout.
+  \item \term{Jacobson/Karels}: tener en cuenta también la \textbf{variación}. $\text{Diff} = \text{Sample}-\text{EstRTT}$; $\text{EstRTT} \mathrel{+}= \delta\cdot\text{Diff}$; $\text{Dev} \mathrel{+}= \delta(|\text{Diff}|-\text{Dev})$;
+        \textbf{Timeout $=$ EstRTT $+$ 4$\cdot$Dev}. Si el RTT es estable, el timeout queda justo; si varía mucho, se agranda.
+  \item \textbf{RFC 6298}: la misma idea formalizada. Primera medición $R$: SRTT $=R$, RTTVAR $=R/2$. Después: RTTVAR $= \tfrac34$RTTVAR $+ \tfrac14|$SRTT$-R'|$ (\emph{primero}), SRTT $= \tfrac78$SRTT $+ \tfrac18 R'$.
+        \textbf{RTO $=$ SRTT $+$ max(G, 4$\cdot$RTTVAR)}, con mínimo 1 s (y 1 s antes de la primera medición).
+\end{itemize}
+
+\subsection{Segmentos chiquitos: Nagle y Silly Window}
+\begin{itemize}
+  \item Problema: en telnet cada tecla genera 4 segmentos y 162 bytes para 1 byte útil.
+  \item \term{Algoritmo de Nagle} (lado \emph{emisor}): si tengo un MSS lleno, lo mando. Si no, y tengo datos en vuelo sin confirmar, \textbf{espero el ACK} juntando datos. Si no hay nada en vuelo, mando ya.
+        Resultado: a lo sumo un segmento chico por RTT.
+  \item \term{Silly Window Syndrome} (lado \emph{receptor}): la app lee de a 1 byte, el receptor anuncia ventanas de 1 byte y el emisor manda segmentos de 1 byte.
+        \textbf{Solución de Clark}: no anunciar ventanas chicas; esperar a tener libre $\min(\text{MSS}, \text{buffer}/2)$.
+\end{itemize}
+
+\subsection{Llenar el caño (otra vez)}
+Para usar todo el enlace la ventana tiene que ser $\ge$ \textbf{RTT $\times$ ancho de banda}. Pero AdvertisedWindow tiene 16 bits, o sea un máximo de \textbf{64 KB}:
+con RTT de 100 ms alcanza para un T1 (18 KB) y ya no para Ethernet de 10 Mbps (122 KB).
+\libro{} Solución: opción \emph{window scale} (RFC 1323), que multiplica la ventana. Esa RFC también agrega \emph{timestamps} para medir mejor el RTT y distinguir números de secuencia que dan la vuelta en redes rápidas.
+\begin{clave}
+Handshake de 3 pasos, cierre de 4, TIME\_WAIT $=2$MSL. Flujo: AdvertisedWindow (receptor) vs congestión (red).
+RTO adaptativo: Karn (no medir retransmitidos $+$ backoff) y Jacobson (media $+$ 4 desvíos). Nagle es del emisor; Clark (silly window) del receptor. Ventana $\ge$ RTT$\times$BW; 64 KB no alcanza.
+\end{clave}
+
+%====================================================================
+\section*{Preguntas típicas para autoevaluarte}
+\begin{multicols}{2}\small
+\begin{enumerate}[leftmargin=14pt]
+  \item ¿Por qué el ancho de banda limita la velocidad? (Fourier $+$ filtro)
+  \item Nyquist vs Shannon. ¿Por qué no subir niveles para siempre?
+  \item ¿Qué mide la entropía? ¿Qué relación tiene con Huffman?
+  \item Componentes del delay; ¿cuál domina en cada caso?
+  \item Teorema de muestreo; ¿por qué PCM usa 64 kbps?
+  \item ¿Por qué Manchester duplica el baud rate? ¿Qué resuelve de NRZ?
+  \item ¿Por qué S\&W es ineficiente? ¿Cómo se dimensiona la ventana? ¿Cuántos números de secuencia hacen falta?
+  \item ¿Por qué Ethernet tiene trama mínima? ¿Qué pasa si sube la velocidad?
+  \item CSMA/CA vs CSMA/CD; estación oculta y expuesta.
+  \item ¿Para qué sirve STP y cómo elige los puertos?
+  \item Dominio de colisión vs de broadcast. ¿Para qué sirven las VLANs?
+  \item Datagramas vs circuitos virtuales.
+  \item Fragmentación IP: dónde se parte, dónde se arma, qué campos intervienen.
+  \item DV vs LS; conteo a infinito y sus parches.
+  \item ¿Por qué OSPF es jerárquico y qué se pierde?
+  \item ¿Por qué hace falta BGP? Tipos de AS.
+  \item Transporte vs enlace: ¿por qué no alcanza la misma ventana?
+  \item ¿Por qué el RTO es adaptativo? Karn y Jacobson.
+  \item Nagle vs Silly Window: ¿de qué lado actúa cada uno?
+  \item ¿Por qué 16 bits de ventana son un problema? TIME\_WAIT y persist timer.
+\end{enumerate}
+\end{multicols}
+
+\end{document}
