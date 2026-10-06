@@ -44,7 +44,7 @@ Armado a partir del simulacro, las guías 1–4, las prácticas 1–4, las teór
 ### 1.1 Las 3 propiedades (revisalas siempre, en este orden)
 1. **Exclusión mutua** (safety): nunca hay 2 en la SC. Contraejemplo = traza que llega a (p en SC, q en SC).
 2. **Sin deadlock/livelock** (liveness): si varios quieren entrar, alguno entra. Contraejemplo = traza donde todos esperan para siempre (livelock si están haciendo busy-waiting).
-3. **Sin inanición** (liveness): todo el que quiere entrar, entra. Contraejemplo = **traza infinita y fair** (toda instrucción continuamente habilitada se termina ejecutando) donde uno nunca entra. Suele ser un ciclo en el grafo de estados.
+3. **Sin inanición** (liveness), que la cátedra también llama **Garantía de Entrada (GdE)**: todo el que quiere entrar, entra. Contraejemplo = **traza infinita y fair** (toda instrucción continuamente habilitada se termina ejecutando) donde uno nunca entra. Suele ser un ciclo en el grafo de estados.
 
 Supuestos del modelo: la SC siempre termina; **la SNC puede no terminar** (así cae la alternancia estricta).
 
@@ -56,14 +56,21 @@ Supuestos del modelo: la SC siempre termina; **la SNC puede no terminar** (así 
 | Turno estricto `while(turno != id)` | **Inanición** | el otro se queda en la SNC y nunca pasa el turno |
 | `x++` / `cant++` sin atomicidad | Update perdido → mutex o deadlock | desagregar en `tmp = x; x = tmp + 1` y entrelazar |
 | Ticket que al salir **decrementa** el ticket en vez de avanzar el turno (G1 ej10, ej14) | **Mutex** (dos threads con el mismo ticket) | A saca 0, B saca 1, A sale (ticket vuelve a 1), C saca 1 → B y C con 1 |
-| Variable de turno (`proximo`, `actual`) que **no se resetea** al salir el último | **Mutex** (queda un valor viejo que deja pasar a alguien) | ver simulacro abajo |
+| Variable de turno (`proximo`, `actual`) que **no se resetea** al salir el último | **Mutex**, pero **solo si los threads vuelven a entrar** (queda un valor viejo que deja pasar a alguien) | ver simulacro abajo |
 | Se elige "el de menor id" | **Inanición** de los ids altos | 0 y 1 alternan para siempre y 2 nunca entra |
 | Peterson generalizado con `otro = (id+1)%n` (G1 ej11) | **Mutex** con n > 2 | cada uno mira a un solo vecino |
 | Bakery sin desempate `j < id` (G1 ej13) | **Deadlock** con números iguales (el mutex vale) | los dos sacan el mismo número y se esperan |
 | Función no atómica que recorre un array (`algunVerdadero`, `llamarProximo`) | Entrelazado **dentro del for** | uno lee `flag[i]` antes de que el otro lo escriba |
 | Dos operaciones atómicas separadas (`soyPrimero = anotarse()` y después `llamarProximo()`) | Check-then-act entre las dos | otro se mete entre ambas |
 
-**Simulacro, inciso (b):** incluso con las funciones atómicas, `proximo` no se resetea. Traza: T1 sale último (`proximo = 1` queda viejo) → T0 hace `anotarse` (es primero) → T1 hace `anotarse` (no es primero), ve `proximo == 1` y **entra** → T0 hace `llamarProximo` → `proximo = 0` → T0 **entra**. Se rompe el mutex. Además hay inanición porque siempre se elige el menor id.
+**Simulacro, inciso (b) (corregido con la solución oficial):** en el enunciado, cada thread entra a la SC **una sola vez** (el código no tiene loop). Con eso, y con las funciones atómicas, **la propuesta resuelve el problema**:
+- **Mutex:** `proximo` solo cambia en `llamarProximo()`. Mientras hay alguien en la SC, `cantEsperando ≥ 1`, así que el que llega no es el primero y no llama a `llamarProximo()`. El que sale solo lo llama si quedan esperando, y ya salió de la SC.
+- **GdE:** exactamente un thread (el que ve `cantEsperando == 1`) arranca la cadena, y cada uno que sale habilita al siguiente, mientras no sea el último.
+- **Escribir la suposición.** Es clave que cada thread entre una sola vez. Si los threads **volvieran a entrar**, se cae:
+  - la solución oficial marca que habría **inanición** (con tres threads, el de id más alto siempre es desplazado, porque se elige el menor id);
+  - además, con `proximo` sin resetear, se puede romper el **mutex**. Traza: T1 sale último (`proximo = 1` queda viejo) → T0 hace `anotarse` (es primero) → T1 vuelve, hace `anotarse` (no es primero), ve `proximo == 1` y **entra** → T0 hace `llamarProximo` → `proximo = 0` → T0 **entra**.
+
+**Inciso (c), según la solución oficial:** el problema es la **lectura** de `cantEsperando` y `proximo`. Sin `volatile` ni barreras, un thread puede leer valores viejos (por ejemplo, ver `cantEsperando` en 0 aunque otro ya lo incrementó), y se vuelve a perder el mutex como en (a). La GdE / ausencia de deadlock, a priori, no se pierde.
 
 ### 1.3 Cómo escribirlo
 - **Traza como tabla:** columnas `T1 | T2 | Estado` (con las variables locales, p. ej. `p.tmp = 0`). Marcá dónde está cada PC.
