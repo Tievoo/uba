@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<!-- saved from url=(0110)https://campus.exactas.uba.ar/pluginfile.php/246118/mod_resource/content/1/Relojes%20de%20Lamport.html?embed=1 -->
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Relojes de Lamport</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com/">
+<link rel="stylesheet" href="./css2">
+<style>
+/* Layout: encabezado de clase + diagrama espacio-tiempo a la izquierda, panel de reglas/cuentas a la derecha; debajo, comparador de eventos. */
+:root{
+  --bg:#f5f6f8; --surface:#ffffff; --ink:#1b2532; --muted:#5d6878; --line:#d7dce3;
+  --slate:#2f4a66; --slate-soft:#e6edf4; --gold:#c9962b; --gold-soft:#f7ecd2;
+  --ok:#2f7a55; --bad:#b4442f; --pending:#b9c1cc;
+  --f-display:"Source Serif 4", Georgia, serif;
+  --f-body:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono:"IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12171e; --surface:#1a212b; --ink:#e4e8ee; --muted:#9aa5b4; --line:#2e3846;
+  --slate:#8fb2d6; --slate-soft:#22303f; --gold:#e2b552; --gold-soft:#3a3020;
+  --ok:#6cc596; --bad:#ec806a; --pending:#4a5565; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12171e; --surface:#1a212b; --ink:#e4e8ee; --muted:#9aa5b4; --line:#2e3846;
+  --slate:#8fb2d6; --slate-soft:#22303f; --gold:#e2b552; --gold-soft:#3a3020;
+  --ok:#6cc596; --bad:#ec806a; --pending:#4a5565; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.55}
+.wrap{max-width:1120px;margin:0 auto;padding-block:28px 48px;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));
+  display:flex;flex-direction:column;gap:22px}
+header .kicker{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+h1{font-family:var(--f-display);font-weight:650;font-size:clamp(26px,4vw,36px);line-height:1.15;margin:4px 0 8px;text-wrap:balance}
+header p{margin:0;max-width:68ch;color:var(--muted)}
+h2{font-family:var(--f-display);font-weight:650;font-size:19px;margin:0 0 10px}
+.grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:18px}
+@media (max-width:860px){.grid{grid-template-columns:1fr}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px;min-width:0}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;border-radius:0}
+button{font:inherit;font-size:14px;font-weight:500;color:var(--ink);background:var(--surface);border:1px solid var(--line);
+  border-radius:8px;padding:7px 12px;cursor:pointer}
+button:hover{background:var(--slate-soft)}
+button[aria-pressed="true"]{background:var(--slate);color:var(--surface)}
+button:disabled{opacity:.45;cursor:default;background:var(--surface)}
+button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.primary{background:var(--slate);color:var(--surface);border-color:var(--slate)}
+.primary:hover{background:var(--slate);filter:brightness(1.1)}
+label.toggle{display:inline-flex;gap:6px;align-items:center;font-size:14px;color:var(--muted);cursor:pointer;margin-left:auto}
+.diagram{overflow-x:auto}
+svg{display:block;width:100%;min-width:560px;height:auto}
+svg text{font-family:var(--f-mono)}
+.counters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px}
+.ctr{border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.ctr .p{font-size:12px;color:var(--muted);font-style:italic}
+.ctr .v{font-family:var(--f-mono);font-size:20px;font-weight:600;font-variant-numeric:tabular-nums}
+.ctr.changed{border-color:var(--gold);background:var(--gold-soft)}
+.rules{list-style:none;margin:0 0 14px;padding:0;display:flex;flex-direction:column;gap:6px}
+.rules li{display:flex;gap:10px;padding:7px 10px;border-radius:8px;border:1px solid transparent}
+.rules li .n{font-family:var(--f-mono);font-weight:600;color:var(--muted)}
+.rules li code{font-family:var(--f-mono);font-size:14px}
+.rules li.on{border-color:var(--gold);background:var(--gold-soft)}
+.rules li.on .n{color:var(--gold)}
+.calc{border-top:1px solid var(--line);padding-top:12px}
+.calc .step{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.calc .what{font-weight:600;margin:2px 0 8px}
+.calc pre{font-family:var(--f-mono);font-size:14px;background:var(--slate-soft);border-radius:8px;padding:10px 12px;margin:0 0 8px;white-space:pre-wrap;overflow-x:auto}
+.calc p{margin:0;color:var(--muted)}
+.calc .warn{color:var(--bad);font-weight:500}
+.compare-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+@media (max-width:700px){.compare-grid{grid-template-columns:1fr}}
+.verdict{border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.verdict .h{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.verdict .r{font-family:var(--f-mono);font-size:15px;font-weight:600;margin:4px 0}
+.verdict p{margin:0;font-size:14px;color:var(--muted)}
+.chip{display:inline-block;font-size:12px;font-weight:600;padding:1px 8px;border-radius:99px;border:1px solid currentColor}
+.chip.ok{color:var(--ok)} .chip.bad{color:var(--bad)} .chip.na{color:var(--muted)}
+.pick{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;align-items:center}
+.pick button{font-family:var(--f-mono);min-width:38px}
+.pick button.sel{background:var(--gold);border-color:var(--gold);color:#1b2532}
+.hint{font-size:13px;color:var(--muted)}
+.foot{font-size:13px;color:var(--muted)}
+.ev{cursor:pointer}
+.ev:focus{outline:none}
+.ev:focus-visible circle.dot{stroke:var(--gold);stroke-width:3}
+@media (prefers-reduced-motion:no-preference){.ev circle,.msg{transition:opacity .25s, fill .25s}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="kicker">RCCD · Límites fundamentales · Tiempo y orden</div>
+    <h1>Relojes de Lamport, paso a paso</h1>
+    <p>El ejemplo de la clase: tres procesos, seis eventos y dos mensajes. Avanzá evento por evento para ver qué regla se aplica y cómo cambia cada contador. Las dos recepciones muestran los dos casos del <code>max</code>.</p>
+  </header>
+
+  <div class="grid">
+    <section class="panel" aria-label="Diagrama espacio-tiempo">
+      <div class="toolbar">
+        <div class="seg" role="group" aria-label="Tipo de reloj">
+          <button id="mode-lamport" aria-pressed="true">Lamport</button>
+          <button id="mode-vector" aria-pressed="false">Vectorial</button>
+        </div>
+        <button id="btn-prev" disabled="">← Anterior</button>
+        <button id="btn-next" class="primary">Siguiente →</button>
+        <button id="btn-reset">Reiniciar</button>
+        <label class="toggle"><input type="checkbox" id="nomax"> Sin <code>max</code></label>
+      </div>
+      <div class="diagram"><svg id="svg" viewBox="0 0 640 300" role="img" aria-label="Diagrama espacio-tiempo de p1, p2 y p3"><defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"></path></marker><marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--gold)"></path></marker></defs><line x1="60" y1="70" x2="600" y2="70" stroke="var(--slate)" stroke-width="2" marker-end="url(#arr)"></line><text x="22" y="75" fill="var(--muted)" font-size="15" font-style="italic">p1</text><line x1="60" y1="150" x2="600" y2="150" stroke="var(--slate)" stroke-width="2" marker-end="url(#arr)"></line><text x="22" y="155" fill="var(--muted)" font-size="15" font-style="italic">p2</text><line x1="60" y1="230" x2="600" y2="230" stroke="var(--slate)" stroke-width="2" marker-end="url(#arr)"></line><text x="22" y="235" fill="var(--muted)" font-size="15" font-style="italic">p3</text><text x="600" y="290" fill="var(--muted)" font-size="11" text-anchor="end">tiempo →</text><line class="msg" x1="138.7144959133842" y1="72.24890217119592" x2="430.31722676290644" y2="147.5012198097823" stroke="var(--muted)" stroke-width="1.6" stroke-dasharray="5 4" opacity="0.2" marker-end="url(#arr)"></line><line class="msg" x1="287.2786247587287" y1="75.29354527907542" x2="491.9126391569681" y2="224.11828302324955" stroke="var(--muted)" stroke-width="1.6" stroke-dasharray="5 4" opacity="0.2" marker-end="url(#arr)"></line><g class="ev" tabindex="0" role="button" aria-label="Evento a"><circle class="dot" cx="130" cy="70" r="7" fill="var(--pending)"></circle><text x="130" y="98" fill="var(--muted)" font-size="13" text-anchor="middle" font-style="italic">a</text></g><g class="ev" tabindex="0" role="button" aria-label="Evento c"><circle class="dot" cx="160" cy="150" r="7" fill="var(--pending)"></circle><text x="160" y="178" fill="var(--muted)" font-size="13" text-anchor="middle" font-style="italic">c</text></g><g class="ev" tabindex="0" role="button" aria-label="Evento b"><circle class="dot" cx="280" cy="70" r="7" fill="var(--pending)"></circle><text x="280" y="98" fill="var(--muted)" font-size="13" text-anchor="middle" font-style="italic">b</text></g><g class="ev" tabindex="0" role="button" aria-label="Evento d"><circle class="dot" cx="300" cy="150" r="7" fill="var(--pending)"></circle><text x="300" y="178" fill="var(--muted)" font-size="13" text-anchor="middle" font-style="italic">d</text></g><g class="ev" tabindex="0" role="button" aria-label="Evento e"><circle class="dot" cx="440" cy="150" r="7" fill="var(--pending)"></circle><text x="440" y="178" fill="var(--muted)" font-size="13" text-anchor="middle" font-style="italic">e</text></g><g class="ev" tabindex="0" role="button" aria-label="Evento f"><circle class="dot" cx="500" cy="230" r="7" fill="var(--pending)"></circle><text x="500" y="258" fill="var(--muted)" font-size="13" text-anchor="middle" font-style="italic">f</text></g></svg></div>
+      <div class="counters" id="counters"><div class="ctr"><div class="p">p1 · C</div><div class="v">0</div></div><div class="ctr"><div class="p">p2 · C</div><div class="v">0</div></div><div class="ctr"><div class="p">p3 · C</div><div class="v">0</div></div></div>
+    </section>
+
+    <aside class="panel" aria-live="polite">
+      <h2>Las tres reglas</h2>
+      <ol class="rules" id="rules">
+        <li data-r="1"><span class="n">1</span><span>Antes de cada evento (local o envío): <code>C := C + 1</code></span></li>
+        <li data-r="2"><span class="n">2</span><span>Al enviar, el mensaje lleva <code>t = C</code></span></li>
+        <li data-r="3"><span class="n">3</span><span>Al recibir con marca <code>t</code>: <code>C := max(C, t) + 1</code></span></li>
+      </ol>
+      <div class="calc" id="calc"><div class="step">Inicio</div><div class="what">Todos los contadores en 0</div><p>Ningún proceso ejecutó eventos. Tocá <b>Siguiente</b> para ejecutar el primero.</p></div>
+    </aside>
+  </div>
+
+  <section class="panel" aria-label="Comparar dos eventos">
+    <h2>¿Ocurrió antes o son concurrentes?</h2>
+    <div class="pick" id="pick"><span class="hint">Elegí dos eventos (también podés tocarlos en el diagrama):</span><button id="pick-a" aria-pressed="false">a</button><button id="pick-b" aria-pressed="false">b</button><button id="pick-c" aria-pressed="false">c</button><button id="pick-d" aria-pressed="false">d</button><button id="pick-e" aria-pressed="false">e</button><button id="pick-f" aria-pressed="false">f</button></div>
+    <div class="compare-grid" id="compare"><p class="hint" style="grid-column:1/-1;margin:0">Probá con <b>c</b> y <b>b</b>: tienen valores de Lamport distintos y aun así son concurrentes. Después probá <b>e</b> y <b>f</b>.</p></div>
+  </section>
+
+  <p class="foot">L. Lamport, “Time, Clocks, and the Ordering of Events in a Distributed System”, CACM 21(7), 1978. Relojes vectoriales: Fidge y Mattern, 1988. Orden total: desempatar por identificador de proceso, (C, p).</p>
+</div>
+
+<script>
+(function(){
+const PROCS=[{id:0,name:"p1",y:70},{id:1,name:"p2",y:150},{id:2,name:"p3",y:230}];
+// Orden de ejecución global del ejemplo
+const EVENTS=[
+  {k:"a",p:0,x:130,type:"send",msg:"m1",desc:"p1 envía m1"},
+  {k:"c",p:1,x:160,type:"local",desc:"evento local en p2"},
+  {k:"b",p:0,x:280,type:"send",msg:"m2",desc:"p1 envía m2"},
+  {k:"d",p:1,x:300,type:"local",desc:"evento local en p2"},
+  {k:"e",p:1,x:440,type:"recv",msg:"m1",from:"a",desc:"p2 recibe m1"},
+  {k:"f",p:2,x:500,type:"recv",msg:"m2",from:"b",desc:"p3 recibe m2"}
+];
+const byK=Object.fromEntries(EVENTS.map(e=>[e.k,e]));
+
+// Simulación completa (con y sin max) para Lamport y vectores
+function simulate(noMax){
+  const L=[0,0,0], V=[[0,0,0],[0,0,0],[0,0,0]], out=[];
+  const stampL={}, stampV={};
+  for(const e of EVENTS){
+    const beforeL=L[e.p], beforeV=V[e.p].slice(); let info={};
+    if(e.type==="recv"){
+      const t=stampL[e.from], tv=stampV[e.from];
+      L[e.p]= noMax ? L[e.p]+1 : Math.max(L[e.p],t)+1;
+      V[e.p]=V[e.p].map((x,i)=>Math.max(x,tv[i])); V[e.p][e.p]+=1;
+      info={t,tv};
+    } else { L[e.p]+=1; V[e.p][e.p]+=1; }
+    stampL[e.k]=L[e.p]; stampV[e.k]=V[e.p].slice();
+    out.push({e,beforeL,afterL:L[e.p],beforeV,afterV:V[e.p].slice(),info,L:L.slice(),V:V.map(v=>v.slice())});
+  }
+  return {steps:out,stampL,stampV};
+}
+
+// Relación "ocurrió antes" real (clausura transitiva)
+const edges={};
+EVENTS.forEach(e=>edges[e.k]=[]);
+PROCS.forEach(p=>{const seq=EVENTS.filter(e=>e.p===p.id).sort((a,b)=>a.x-b.x);for(let i=0;i+1<seq.length;i++)edges[seq[i].k].push(seq[i+1].k);});
+EVENTS.filter(e=>e.type==="recv").forEach(e=>edges[e.from].push(e.k));
+function hb(a,b){const st=[a],seen=new Set();while(st.length){const x=st.pop();for(const y of edges[x]){if(y===b)return true;if(!seen.has(y)){seen.add(y);st.push(y);}}}return false;}
+
+const state={step:0,mode:"lamport",noMax:false,sel:[]};
+try{const m=localStorage.getItem("lamport-mode");if(m==="vector"||m==="lamport")state.mode=m;}catch(_){}
+
+const svg=document.getElementById("svg"), NS="http://www.w3.org/2000/svg";
+const el=(t,a,parent)=>{const n=document.createElementNS(NS,t);for(const k in a)n.setAttribute(k,a[k]);(parent||svg).appendChild(n);return n;};
+const fmtV=v=>"("+v.join(",")+")";
+
+function render(){
+  const sim=simulate(state.noMax), shown=sim.steps.slice(0,state.step);
+  const done=new Set(shown.map(s=>s.e.k));
+  const cur=state.step>0?sim.steps[state.step-1]:null;
+  svg.innerHTML="";
+  const defs=el("defs",{});
+  const mk=el("marker",{id:"arr",viewBox:"0 0 10 10",refX:"9",refY:"5",markerWidth:"7",markerHeight:"7",orient:"auto-start-reverse"},defs);
+  el("path",{d:"M0,0 L10,5 L0,10 z",fill:"var(--muted)"},mk);
+  const mk2=el("marker",{id:"arr2",viewBox:"0 0 10 10",refX:"9",refY:"5",markerWidth:"7",markerHeight:"7",orient:"auto-start-reverse"},defs);
+  el("path",{d:"M0,0 L10,5 L0,10 z",fill:"var(--gold)"},mk2);
+
+  PROCS.forEach(p=>{
+    el("line",{x1:60,y1:p.y,x2:600,y2:p.y,stroke:"var(--slate)","stroke-width":2,"marker-end":"url(#arr)"});
+    const t=el("text",{x:22,y:p.y+5,fill:"var(--muted)","font-size":15,"font-style":"italic"});t.textContent=p.name;
+  });
+  const tt=el("text",{x:600,y:290,fill:"var(--muted)","font-size":11,"text-anchor":"end"});tt.textContent="tiempo →";
+
+  // mensajes
+  EVENTS.filter(e=>e.type==="recv").forEach(r=>{
+    const s=byK[r.from], ys=PROCS[s.p].y, yr=PROCS[r.p].y;
+    const sent=done.has(s.k), recvd=done.has(r.k), active=cur&&cur.e.k===r.k;
+    const dx=r.x-s.x, dy=yr-ys, len=Math.hypot(dx,dy), ux=dx/len, uy=dy/len;
+    el("line",{class:"msg",x1:s.x+ux*9,y1:ys+uy*9,x2:r.x-ux*10,y2:yr-uy*10,
+      stroke:active?"var(--gold)":"var(--muted)","stroke-width":active?2.4:1.6,
+      "stroke-dasharray":recvd?"":"5 4",opacity:sent?1:.2,"marker-end":active?"url(#arr2)":"url(#arr)"});
+    if(sent){
+      const mx=s.x+dx*.42, my=ys+dy*.42;
+      const tag=state.mode==="lamport"?`${r.msg}, t=${sim.stampL[s.k]}`:`${r.msg}, ${fmtV(sim.stampV[s.k])}`;
+      const w=tag.length*7.2+10;
+      el("rect",{x:mx+6,y:my-11,width:w,height:18,rx:4,fill:"var(--surface)",stroke:"var(--line)"});
+      const t=el("text",{x:mx+11,y:my+2,fill:"var(--ink)","font-size":12});t.textContent=tag;
+    }
+  });
+
+  // eventos
+  EVENTS.forEach(e=>{
+    const y=PROCS[e.p].y, isDone=done.has(e.k), active=cur&&cur.e.k===e.k, sel=state.sel.includes(e.k);
+    const g=el("g",{class:"ev",tabindex:0,role:"button","aria-label":`Evento ${e.k}`});
+    if(active) el("circle",{cx:e.x,cy:y,r:15,fill:"var(--gold-soft)",stroke:"var(--gold)","stroke-width":1.5},g);
+    if(sel) el("circle",{cx:e.x,cy:y,r:13,fill:"none",stroke:"var(--gold)","stroke-width":2.5,"stroke-dasharray":"3 2"},g);
+    el("circle",{class:"dot",cx:e.x,cy:y,r:7,fill:isDone?"var(--slate)":"var(--pending)"},g);
+    const name=el("text",{x:e.x,y:y+28,fill:"var(--muted)","font-size":13,"text-anchor":"middle","font-style":"italic"},g);name.textContent=e.k;
+    if(isDone){
+      const val=state.mode==="lamport"?String(sim.stampL[e.k]):fmtV(sim.stampV[e.k]);
+      const w=val.length*8.4+10;
+      el("rect",{x:e.x-w/2,y:y-33,width:w,height:20,rx:4,fill:active?"var(--gold)":"var(--slate-soft)"},g);
+      const v=el("text",{x:e.x,y:y-18,fill:active?"#1b2532":"var(--ink)","font-size":14,"font-weight":600,"text-anchor":"middle"},g);v.textContent=val;
+    }
+    g.addEventListener("click",()=>toggleSel(e.k));
+    g.addEventListener("keydown",ev=>{if(ev.key==="Enter"||ev.key===" "){ev.preventDefault();toggleSel(e.k);}});
+  });
+
+  // contadores
+  const C=cur?(state.mode==="lamport"?cur.L:cur.V):(state.mode==="lamport"?[0,0,0]:[[0,0,0],[0,0,0],[0,0,0]]);
+  document.getElementById("counters").innerHTML=PROCS.map(p=>
+    `<div class="ctr${cur&&cur.e.p===p.id?" changed":""}"><div class="p">${p.name} · C</div><div class="v">${state.mode==="lamport"?C[p.id]:fmtV(C[p.id])}</div></div>`).join("");
+
+  // reglas activas y cuenta
+  const on=!cur?[]:cur.e.type==="send"?["1","2"]:cur.e.type==="local"?["1"]:["3"];
+  document.querySelectorAll("#rules li").forEach(li=>li.classList.toggle("on",on.includes(li.dataset.r)));
+  document.getElementById("calc").innerHTML=calcHTML(cur,sim);
+
+  document.getElementById("btn-prev").disabled=state.step===0;
+  document.getElementById("btn-next").disabled=state.step===EVENTS.length;
+  document.getElementById("mode-lamport").setAttribute("aria-pressed",state.mode==="lamport");
+  document.getElementById("mode-vector").setAttribute("aria-pressed",state.mode==="vector");
+  renderCompare(sim);
+}
+
+function calcHTML(cur,sim){
+  const n=state.step, N=EVENTS.length;
+  if(!cur) return `<div class="step">Inicio</div><div class="what">Todos los contadores en 0</div><p>Ningún proceso ejecutó eventos. Tocá <b>Siguiente</b> para ejecutar el primero.</p>`;
+  const e=cur.e, P=PROCS[e.p].name, head=`<div class="step">Evento ${n} de ${N}</div><div class="what">${e.k}: ${e.desc}</div>`;
+  if(state.mode==="lamport"){
+    if(e.type==="local") return head+`<pre>C(${P}) := ${cur.beforeL} + 1 = ${cur.afterL}</pre><p>Un evento interno sólo avanza el contador propio.</p>`;
+    if(e.type==="send") return head+`<pre>C(${P}) := ${cur.beforeL} + 1 = ${cur.afterL}\n${e.msg} lleva t = ${cur.afterL}</pre><p>El envío es un evento: primero suma 1 y después pega el valor en el mensaje.</p>`;
+    const t=cur.info.t;
+    if(state.noMax){
+      const bad=cur.afterL<=t;
+      return head+`<pre>C(${P}) := ${cur.beforeL} + 1 = ${cur.afterL}   (ignorando t = ${t})</pre>`+
+        (bad?`<p class="warn">Violación: el envío ${e.from} vale ${t} y su recepción ${e.k} vale ${cur.afterL}. La causa quedaría numerada después del efecto.</p>`
+            :`<p>Acá no se nota: el reloj local ya iba adelantado. Probá el último evento, f.</p>`);
+    }
+    const local=cur.beforeL>=t;
+    return head+`<pre>C(${P}) := max(${cur.beforeL}, ${t}) + 1 = ${cur.afterL}</pre><p>${local
+      ?`<b>Gana el reloj local.</b> ${P} ya iba por ${cur.beforeL}, más que la marca ${t}; el mensaje no aporta información nueva.`
+      :`<b>Gana la marca del mensaje.</b> ${P} venía atrasado (${cur.beforeL}). Sin el max, ${e.k} valdría ${cur.beforeL+1}, menos que el envío ${e.from} que lo causó.`}</p>`;
+  }
+  // vectorial
+  const i=e.p+1;
+  if(e.type!=="recv") return head+`<pre>V(${P})[${i}] := ${cur.beforeV[e.p]} + 1\nV(${P}) = ${fmtV(cur.afterV)}${e.type==="send"?`\n${e.msg} lleva ${fmtV(cur.afterV)}`:""}</pre><p>Cada proceso cuenta sus propios eventos en su componente.</p>`;
+  const merged=cur.beforeV.map((x,k)=>Math.max(x,cur.info.tv[k]));
+  return head+`<pre>max(${fmtV(cur.beforeV)}, ${fmtV(cur.info.tv)}) = ${fmtV(merged)}\nV(${P})[${i}] += 1  →  ${fmtV(cur.afterV)}</pre><p>Máximo componente a componente y suma 1 en la propia. El vector registra cuántos eventos de cada proceso pudieron influir en ${e.k}.</p>`;
+}
+
+function toggleSel(k){
+  const i=state.sel.indexOf(k);
+  if(i>=0) state.sel.splice(i,1); else { state.sel.push(k); if(state.sel.length>2) state.sel.shift(); }
+  render();
+}
+
+function renderCompare(){
+  const full=simulate(false);
+  const pick=document.getElementById("pick");
+  pick.querySelectorAll("button").forEach(b=>b.remove());
+  EVENTS.slice().sort((a,b)=>a.k.localeCompare(b.k)).forEach(e=>{
+    const b=document.createElement("button");b.textContent=e.k;b.id="pick-"+e.k;
+    if(state.sel.includes(e.k)) b.className="sel";
+    b.setAttribute("aria-pressed",state.sel.includes(e.k));
+    b.onclick=()=>toggleSel(e.k);pick.appendChild(b);
+  });
+  const box=document.getElementById("compare");
+  if(state.sel.length<2){box.innerHTML=`<p class="hint" style="grid-column:1/-1;margin:0">Probá con <b>c</b> y <b>b</b>: tienen valores de Lamport distintos y aun así son concurrentes. Después probá <b>e</b> y <b>f</b>.</p>`;return;}
+  const [x,y]=state.sel;
+  const truth=hb(x,y)?`${x} → ${y}`:hb(y,x)?`${y} → ${x}`:`${x} ∥ ${y}`;
+  const conc=truth.includes("∥");
+  const Lx=full.stampL[x], Ly=full.stampL[y];
+  let lam;
+  if(Lx===Ly) lam={r:`C(${x}) = C(${y}) = ${Lx}`,chip:`<span class="chip ok">⇒ concurrentes</span>`,p:"Valores iguales sólo pueden darse entre eventos concurrentes (contrarrecíproca de la condición de reloj)."};
+  else { const [lo,hi]=Lx<Ly?[x,y]:[y,x];
+    lam={r:`C(${x}) = ${Lx}, C(${y}) = ${Ly}`,chip:`<span class="chip na">no alcanza</span>`,
+      p:`Sólo descarta ${hi} → ${lo}. Puede ser ${lo} → ${hi} o concurrentes${conc?"; en este caso son concurrentes y el número no lo revela.":"."}`}; }
+  const Vx=full.stampV[x], Vy=full.stampV[y];
+  const le=(a,b)=>a.every((v,i)=>v<=b[i]);
+  const vr=le(Vx,Vy)?`${x} → ${y}`:le(Vy,Vx)?`${y} → ${x}`:`${x} ∥ ${y}`;
+  box.innerHTML=
+    `<div class="verdict"><div class="h">Relación real</div><div class="r">${truth}</div><p>${conc?"Ninguno pudo enterarse del otro: no hay camino de eventos y mensajes entre ellos.":"Hay un camino por el mismo proceso y/o por mensajes."}</p></div>`+
+    `<div class="verdict"><div class="h">Lamport</div><div class="r">${lam.r}</div><p>${lam.chip} ${lam.p}</p></div>`+
+    `<div class="verdict"><div class="h">Vectorial</div><div class="r">${fmtV(Vx)} vs ${fmtV(Vy)}</div><p><span class="chip ${vr===truth?"ok":"bad"}">⇒ ${vr}</span> ${vr.includes("∥")?"Ningún vector es ≤ al otro en todas las componentes.":"Un vector es ≤ al otro componente a componente."}</p></div>`;
+}
+
+document.getElementById("btn-next").onclick=()=>{if(state.step<EVENTS.length){state.step++;render();}};
+document.getElementById("btn-prev").onclick=()=>{if(state.step>0){state.step--;render();}};
+document.getElementById("btn-reset").onclick=()=>{state.step=0;render();};
+const setMode=m=>{state.mode=m;try{localStorage.setItem("lamport-mode",m);}catch(_){}document.getElementById("nomax").disabled=m!=="lamport";render();};
+document.getElementById("mode-lamport").onclick=()=>setMode("lamport");
+document.getElementById("mode-vector").onclick=()=>setMode("vector");
+document.getElementById("nomax").onchange=ev=>{state.noMax=ev.target.checked;render();};
+document.addEventListener("keydown",ev=>{if(ev.target.closest("input,button,[role=button]"))return;
+  if(ev.key==="ArrowRight")document.getElementById("btn-next").click();
+  if(ev.key==="ArrowLeft")document.getElementById("btn-prev").click();});
+document.getElementById("nomax").disabled=state.mode!=="lamport";
+render();
+})();
+</script>
+
+</body></html>

@@ -8,13 +8,15 @@ La materia tiene **4 temas**. Cada uno tiene una teórica, una práctica, una gu
 | 2 | Semáforos | 02-Semaforos | practica-clase-02 | Guía 2 | Labo 1 | Ej 2 |
 | 3 | Monitores | 03-Monitores | clase-3-apunte | Guía 3 | — | Ej 3 |
 | 4 | Estructuras concurrentes y lock-free | 04-Listas, 05-colas | clase-04 | Guía 4 | Labo 3 | Ej 4 |
+| 5 | Memoria transaccional (STM, en Haskell) | 06-stm | clase-5-apunte | Guía 5 (+ warm-up de Haskell) | — | ? |
 
 ## Orden de lectura sugerido
 1. `01-exclusion-mutua.md` → después, la práctica 1 completa.
 2. `02-semaforos.md` → práctica 2 + labo 1 (**prioridad alta**).
 3. `03-monitores.md` → apunte de la práctica 3 (**prioridad alta**; está escrito como una clase y se lee muy bien).
 4. `04-estructuras.md` → práctica 4 + teóricas 4 y 5.
-5. `../patrones-parcial.md` → el "machete" para ejercitar con el simulacro.
+5. `05-haskell-minimo.md` → warm-up (`guias/guia5-warmup.hs`) → `05-stm.md` → Guía 5.
+6. `../patrones-parcial.md` → el "machete" para ejercitar con el simulacro.
 
 ## Idea general de la materia, en un párrafo
 Hay varios **threads** (hilos) que corren "a la vez" y comparten memoria. El problema: si dos tocan la misma variable al mismo tiempo, pasan cosas raras (se pierden sumas, dos entran a donde debía entrar uno solo, alguien espera para siempre). La materia es una escalera de herramientas para evitarlo:
