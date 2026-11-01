@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Resumen Congestión</title>
+<style>
+  @page { size: A4; margin: 14mm 14mm; }
+  :root { --ink:#1b1b1b; --muted:#555; --accent:#1f6fb2; --warn:#b3261e; --box:#f3f6fa; --line:#d6dde6; }
+  body { font-family: "Segoe UI", Arial, sans-serif; font-size: 10.5pt; line-height: 1.38; color: var(--ink); background:#fff; margin:0; }
+  h1 { font-size: 18pt; margin: 0 0 2px; }
+  .sub { color: var(--muted); margin: 0 0 12px; }
+  h2 { font-size: 13pt; color: var(--accent); border-bottom: 2px solid var(--accent); padding-bottom: 2px; margin: 18px 0 8px; break-after: avoid; }
+  h3 { font-size: 11pt; margin: 12px 0 4px; break-after: avoid; }
+  p { margin: 4px 0 6px; }
+  ul { margin: 4px 0 6px; padding-left: 18px; }
+  li { margin: 2px 0; }
+  code, .f { font-family: Consolas, "Courier New", monospace; font-size: 9.6pt; }
+  .box { background: var(--box); border-left: 4px solid var(--accent); padding: 6px 10px; margin: 8px 0; break-inside: avoid; }
+  .warn { background: #fdf1f0; border-left: 4px solid var(--warn); padding: 6px 10px; margin: 8px 0; break-inside: avoid; }
+  table { border-collapse: collapse; width: 100%; margin: 6px 0 8px; break-inside: avoid; }
+  th, td { border: 1px solid var(--line); padding: 3px 6px; text-align: left; vertical-align: top; }
+  th { background: #e8eef5; }
+  .chart { width: 100%; max-width: 560px; display:block; margin: 6px auto; }
+  .tag { display:inline-block; background: var(--accent); color:#fff; border-radius: 3px; padding: 0 5px; font-size: 8.5pt; font-weight: 600; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .pb { break-before: page; }
+</style>
+</head>
+<body>
+
+<h1>Congestión — Guía 5</h1>
+<p class="sub">RCCD 2C 2026 · Resumen de la teórica 15 (Congestión), la práctica de control de congestión en TCP y las definiciones de la guía 5.</p>
+
+<h2>0 · La idea en criollo (ELI5)</h2>
+<p>Pensá la red como una autopista con peajes (los routers). Cada peaje tiene una playa de espera (el <b>buffer</b>). Si llegan más autos de los que el peaje despacha, la playa se llena y los autos que siguen llegando <b>se tiran</b> (drop tail). Los conductores a los que les tiraron el auto vuelven a mandarlo (retransmisión), y eso agrega todavía más tráfico. Eso es la <b>congestión</b>: un problema que se realimenta solo y, en el límite, llega al <b>colapso</b>, donde la red está a full y casi nada útil llega a destino (goodput → 0).</p>
+<p>Nadie le avisa a TCP "che, la red está llena". Entonces TCP <b>tantea</b>:</p>
+<ul>
+  <li>Arranca mandando poquito y, mientras le vuelvan los ACKs, <b>duplica</b> lo que manda en cada RTT (<b>Slow Start</b>, que de lento no tiene nada).</li>
+  <li>Cuando se acerca a un umbral (<b>SSTHRESH</b>, "hasta acá era seguro la última vez") pasa a crecer <b>de a un segmento por RTT</b> (<b>Congestion Avoidance</b>).</li>
+  <li>Si <b>se pierde algo</b>, asume que fue por congestión: baja el umbral a la mitad de lo que tenía en vuelo y frena. Si se enteró por <b>timeout</b> (grave: no vuelve nada), arranca de cero. Si se enteró por <b>3 ACKs duplicados</b> (leve: los datos siguen llegando), solo corta a la mitad (<b>FR/FR</b>).</li>
+</ul>
+<p>Todo eso se resume en una variable, la <b>ventana de congestión CWND</b>: cuántos bytes me animo a tener "en el aire" sin que me los hayan confirmado. Y nunca puedo pasarme de lo que el receptor dice que puede recibir (<b>RWND</b>, el control de flujo).</p>
+<div class="box"><b>Control de flujo vs. control de congestión.</b> El de flujo protege al <b>receptor</b> (punto a punto, RWND/AdvertisedWindow). El de congestión protege a la <b>red</b> (efecto global, CWND). TCP manda <span class="f">min(CWND, RWND)</span>.</div>
+
+<h2>1 · Teórica: congestión en general</h2>
+<h3>Definición y síntomas</h3>
+<p><b>Congestión</b>: estado de sobrecarga <i>sostenida</i> donde la demanda de recursos (enlaces y buffers) está al límite de la capacidad o la supera. Se nota como QoS degradada. Los síntomas son pérdida de paquetes (los buffers se llenan) y retardos que crecen (encolamiento). Las métricas que la delatan son el % de descartes, el largo medio de cola, la cantidad de retransmisiones/timeouts, y el delay promedio y su desvío.</p>
+<p><b>Causas</b>: mucho tráfico hacia una misma salida, cuellos de botella "aguas abajo" (varias líneas rápidas que desembocan en una lenta), procesadores lentos. <b>Más memoria no lo resuelve</b>: con buffers infinitos los paquetes esperan tanto que el emisor da timeout y retransmite duplicados, que también ocupan la red. Se cambia pérdida por delay y se empeora.</p>
+<p>Los nodos son <b>FIFO + Drop Tail</b> salvo que se diga otra cosa. Combinados pueden causar <b>sincronización global</b>: muchas conexiones pierden a la vez, todas bajan a la vez y todas vuelven a subir a la vez.</p>
+
+<h3>Carga vs. performance</h3>
+<ul>
+  <li>Al subir la carga, el throughput sube lineal hasta el <b>knee</b>. Desde ahí el tiempo de respuesta crece rápido. En el <b>cliff</b> el throughput se desploma (colapso).</li>
+  <li><b>Potencia = throughput / delay</b>. Su máximo marca la carga óptima.</li>
+  <li><b>Equidad de Jain</b>: <span class="f">f = (Σxᵢ)² / (n·Σxᵢ²)</span>. Vale 1 si todos reciben lo mismo y 1/n si uno solo se lleva todo.</li>
+</ul>
+
+<h3>Colas M/M/1 (un buffer)</h3>
+<p>Llegadas Poisson con tasa λ, servicio exponencial con tasa μ, un servidor, cola infinita. La <b>intensidad</b> es ρ = λ/μ. Solo hay estado estacionario si <b>ρ &lt; 1</b>; si ρ ≥ 1 el sistema desborda (congestión).</p>
+<p class="f">E[N] = ρ/(1−ρ)    E[T] = E[N]/λ = 1/(μ−λ)    (Little: N = λ·T)</p>
+<p>E[T] explota cuando ρ → 1: por eso no conviene operar cerca del 100% de utilización. Con M/M/m (más servidores) la curva aguanta más, pero igual explota.</p>
+
+<h3>Soluciones y taxonomía (Yang &amp; Reddy)</h3>
+<ul>
+  <li><b>Pre-asignar recursos</b> (reservar buffers/BW): evita la congestión pero <b>subutiliza</b>. Con datagramas (IP) no es viable porque no hay circuito establecido sobre el cual reservar. Eso es lo que pregunta el ej. 1a.</li>
+  <li><b>Lazo abierto</b>: se decide de antemano, sin mirar el estado de la red (conmutación de circuitos, GMPLS).</li>
+  <li><b>Lazo cerrado</b>: se usa realimentación (redes de paquetes). Hay dos tipos:
+    <ul>
+      <li><b>Implícita</b> (end-to-end): la fuente <i>infiere</i> la congestión a partir de timeouts o ACKs duplicados. Es la que usa <b>TCP</b> (Tahoe, Reno, Vegas, CUBIC). Es simple y vive en el nivel de transporte.</li>
+      <li><b>Explícita</b> (network-assisted): el router <i>marca</i> los paquetes. Ejemplos: DECbit, <b>ECN</b> (bits en el byte ToS de IP), ATM ABR, ICMP source quench. Es más precisa, pero hay que cambiar tanto los hosts como los routers.</li>
+    </ul>
+  </li>
+</ul>
+
+<h3>RED — Random Early Detection (AQM)</h3>
+<p>Es una técnica del <b>router</b> que <i>previene</i> la congestión: en vez de esperar a que el buffer se llene, descarta (o marca con ECN) paquetes al azar <b>antes</b>, para que las fuentes TCP frenen de a una y no todas juntas (evita la sincronización global). No guarda estado por conexión.</p>
+<ul>
+  <li>Promedio de la cola: <span class="f">AvgLen = (1−w)·AvgLen + w·SampleLen</span>, con 0 &lt; w &lt; 1.</li>
+  <li>AvgLen ≤ MinTh → encola. MinTh &lt; AvgLen &lt; MaxTh → descarta con probabilidad P. AvgLen ≥ MaxTh → descarta siempre.</li>
+  <li><span class="f">TempP = MaxP·(AvgLen−MinTh)/(MaxTh−MinTh)</span>, <span class="f">P = TempP/(1 − count·TempP)</span>. Valores típicos: MaxP ≈ 0.02 (uno de cada 50) y MaxTh = 2·MinTh.</li>
+  <li>La probabilidad de que le descarten a un flujo es ≈ proporcional a la porción del ancho de banda que usa.</li>
+</ul>
+
+<h3>Throughput de TCP en régimen (Mathis)</h3>
+<p>En CA la ventana oscila entre W/2 y W (diente de sierra). Por ciclo se mandan 3W²/8 paquetes en W/2 RTTs. Con probabilidad de pérdida p (1 pérdida cada 1/p paquetes) queda W = √(8/(3p)) y</p>
+<p class="f">BW = (MSS / RTT) · C / √p     con C = √(3/2)</p>
+<p>Moraleja: el throughput es <b>inversamente proporcional al RTT y a √p</b>.</p>
+
+<h2 class="pb">2 · Control de congestión en TCP (RFC 5681, convenciones de la guía)</h2>
+<h3>Variables</h3>
+<table>
+<tr><th>Nombre</th><th>Qué es</th><th>Valor inicial (guía)</th></tr>
+<tr><td>SMSS</td><td>tamaño máximo de segmento del emisor (sin headers)</td><td>2 KB</td></tr>
+<tr><td>CWND</td><td>ventana de congestión: cuánto me animo a tener en vuelo</td><td>IW = 2·SMSS = 4 KB</td></tr>
+<tr><td>SSTHRESH</td><td>umbral entre Slow Start y Congestion Avoidance</td><td>64 KB</td></tr>
+<tr><td>RWND</td><td>lo que anuncia el receptor (AdvertisedWindow)</td><td>dato del ejercicio</td></tr>
+<tr><td>FlightSize</td><td>bytes enviados y todavía no ACKeados (LastByteSent − LastByteAcked)</td><td>—</td></tr>
+</table>
+<p class="f">MaxWindow = min(RWND, CWND)       EffectiveWindow = MaxWindow − (LastByteSent − LastByteAcked)</p>
+
+<h3>Reglas — la tabla que hay que saber de memoria</h3>
+<table>
+<tr><th>Situación</th><th>SSTHRESH</th><th>CWND</th></tr>
+<tr><td><b>Slow Start</b> (CWND &lt; SSTHRESH)</td><td>igual</td><td>+min(N, SMSS) por ACK ⇒ <b>×2 por RTT</b></td></tr>
+<tr><td><b>Congestion Avoidance</b> (CWND &gt; SSTHRESH)</td><td>igual</td><td>+SMSS·SMSS/CWND por ACK ⇒ <b>+1 SMSS por RTT</b></td></tr>
+<tr><td><b>Timeout</b></td><td>max(FlightSize/2, 2·SMSS)</td><td><b>1 SMSS</b> (LW), y vuelve a Slow Start</td></tr>
+<tr><td><b>3 ACKs duplicados</b> (entra a FR/FR)</td><td>max(FlightSize/2, 2·SMSS)</td><td>SSTHRESH + 3·SMSS; retransmite el segmento perdido</td></tr>
+<tr><td>Cada ACK dup. extra en FR/FR</td><td>igual</td><td>+1 SMSS (infla la ventana: cada dup = un segmento que salió de la red)</td></tr>
+<tr><td>ACK de datos nuevos (sale de FR/FR)</td><td>igual</td><td><b>= SSTHRESH</b> y sigue en CA</td></tr>
+<tr><td>Idle ≥ 1 RTO sin transmitir</td><td>igual</td><td>min(IW, CWND)</td></tr>
+</table>
+<div class="warn"><b>Trampas típicas.</b>
+<ul>
+  <li>El SSTHRESH nuevo sale de <b>FlightSize/2</b>, no de CWND/2. Si la app mandaba menos de lo que permitía la ventana (o RWND limitaba), FlightSize &lt; CWND. El ej. 12 se basa justamente en esto.</li>
+  <li>Lo que sale a la red por RTT es <b>min(CWND, RWND)</b>. CWND puede seguir creciendo en papel aunque RWND sea la que limita.</li>
+  <li>En Slow Start la duplicación <b>no se pasa de SSTHRESH</b>: al alcanzarlo, recorto ahí y sigo en CA. Es la convención habitual; si no está clara, aclarala en la respuesta.</li>
+  <li>Si se pierde <b>toda la ráfaga</b>, no vuelve ningún ACK, ni siquiera duplicado. Eso es <b>timeout</b>, no FR/FR.</li>
+  <li>Los ACKs son <b>acumulativos y en bytes</b>: el ACK dice "el próximo byte que espero".</li>
+  <li>Con ACKs demorados (1 ACK cada 2 segmentos), en Slow Start CWND crece menos que ×2 por RTT, porque suma de a ACK (eso es min(N, SMSS)). Lo pregunta el ej. 7.</li>
+</ul></div>
+
+<h3>Cómo se ve (ejemplo inventado: SSTHRESH 64 KB, ráfagas ≥ 24 KB se pierden enteras)</h3>
+<svg viewBox="0 0 500 262" class="chart">
+<line x1="40" y1="210" x2="490" y2="210" stroke="#333"/><line x1="40" y1="20" x2="40" y2="210" stroke="#333"/>
+<line x1="40" y1="90" x2="490" y2="90" stroke="#c33" stroke-dasharray="4 3"/><text x="488" y="86" font-size="9" fill="#c33" text-anchor="end">umbral de pérdida 24 KB</text>
+<text x="34" y="213" font-size="8" text-anchor="end">0</text><text x="34" y="173" font-size="8" text-anchor="end">8</text><text x="34" y="133" font-size="8" text-anchor="end">16</text><text x="34" y="93" font-size="8" text-anchor="end">24</text><text x="34" y="53" font-size="8" text-anchor="end">32</text>
+<text x="265" y="232" font-size="9" text-anchor="middle">RTTs →</text><text x="12" y="120" font-size="9" transform="rotate(-90 12 120)" text-anchor="middle">CWND (KB)</text>
+<polyline points="40,190 60,190 60,170 80,170 80,130 100,130 100,50 120,50 120,200 140,200 140,190 160,190 160,170 180,170 180,130 200,130 200,120 220,120 220,110 240,110 240,100 260,100 260,90 280,90 280,200 300,200 300,190 320,190 320,170 340,170 340,150 360,150 360,140 380,140 380,130 400,130 400,120 420,120 420,110 440,110 440,100 460,100 460,90 480,90" fill="none" stroke="#1f6fb2" stroke-width="2"/>
+<polyline points="40,190 60,190 60,170 80,170 80,130 100,130 100,50 120,50 120,130 140,130 140,120 160,120 160,110 180,110 180,100 200,100 200,90 220,90 220,150 240,150 240,140 260,140 260,130 280,130 280,120 300,120 300,110 320,110 320,100 340,100 340,90 360,90 360,150 380,150 380,140 400,140 400,130 420,130 420,120 440,120 440,110 460,110 460,100 480,100" fill="none" stroke="#e08a00" stroke-width="2" stroke-dasharray="5 3"/>
+
+<line x1="50" y1="252" x2="72" y2="252" stroke="#1f6fb2" stroke-width="2"/><text x="77" y="255" font-size="9">timeout → CWND = 1·SMSS (Tahoe)</text>
+<line x1="270" y1="252" x2="292" y2="252" stroke="#e08a00" stroke-width="2" stroke-dasharray="5 3"/><text x="297" y="255" font-size="9">3 dup ACKs → CWND ≈ SSTHRESH (FR/FR)</text>
+</svg>
+<p>Traza en azul (timeouts), en KB por RTT: <span class="f">4, 8, 16, <b>32✗</b></span> → SSTHRESH = 32/2 = 16, CWND = 2 → <span class="f">2, 4, 8, 16, 18, 20, 22, <b>24✗</b></span> → SSTHRESH = 12 → <span class="f">2, 4, 8, 12 (recortado), 14, …, <b>24✗</b></span> → SSTHRESH = 12 otra vez. SSTHRESH ya no cambia: eso es el <b>estado estacionario</b> del ej. 11.</p>
+<p>La curva naranja es lo que pasaría si la pérdida se detectara por 3 ACKs duplicados (FR/FR). No vuelve a 1 SMSS, sino a la mitad: es el diente de sierra AIMD "puro". Es lo que te pide comparar el ej. 8.</p>
+
+<h3>RTT y RTO</h3>
+<p><b>Versión de la guía</b> (la original, la que se usa en los ejercicios):</p>
+<p class="f">RTT[i+1] = α·RTT[i] + (1−α)·SampleRTT        RTO = 2·RTT estimado</p>
+<ul>
+  <li>Con α = 1 el estimado nunca se mueve: el RTO queda clavado en 2·(primera muestra).</li>
+  <li>Con α chico el estimado sigue a la última muestra (reacciona rápido pero es ruidoso).</li>
+  <li>Hay <b>timeout</b> si una muestra (un ACK) tarda más que el RTO vigente <i>en ese momento</i>.</li>
+</ul>
+<p><b>Karn/Partridge</b>: no se samplea el RTT de un segmento retransmitido (sería ambiguo a qué envío corresponde el ACK) y, al retransmitir, se <b>duplica el RTO</b> (backoff).</p>
+<p><b>Jacobson/Karels</b> (RFC 6298) tiene en cuenta la varianza:</p>
+<p class="f">Diff = Sample − Est;  Est += δ·Diff;  Dev += δ·(|Diff| − Dev);  RTO = μ·Est + φ·Dev   (μ=1, φ=4, δ=1/8)</p>
+
+<h2 class="pb">3 · Tipos de ejercicio de la guía y cómo se encaran</h2>
+
+<h3><span class="tag">A</span> Conceptuales — ej. 1, 2, 3, 7</h3>
+<p>Son preguntas de "¿se puede…? / ¿por qué…?". La receta: decir <b>qué mecanismo</b> está en juego y <b>qué pasa en el borde</b>.</p>
+<ul>
+  <li><b>Pre-alocar buffers con datagramas</b> → no hay conexión sobre la cual reservar, y si reservás para todos, subutilizás.</li>
+  <li><b>Ruteo solo</b> → el ruteo puede repartir la carga, pero si la demanda total supera la capacidad, no hay ruta que lo salve.</li>
+  <li><b>Buffers infinitos</b> → no hay pérdidas, pero el delay crece sin cota, salta el timeout y hay retransmisiones duplicadas: más carga y peor.</li>
+  <li><b>Cuándo CWND no representa la congestión</b>: pérdidas por <b>errores de bit</b> (enlaces inalámbricos), donde TCP frena sin que haya congestión; conexiones muy cortas o <b>idle</b>, donde CWND quedó vieja; o cuando lo que limita es RWND o la app. Para los primeros casos, las medidas son ECN/feedback explícito o retransmisión en el nivel de enlace.</li>
+  <li><b>¿Por qué no arrancar con una ventana enorme?</b> Porque no conocés la capacidad del camino: una ráfaga grande llena los buffers de golpe y genera pérdidas para vos y para todos. Era el problema original del colapso de 1986 que motivó a Jacobson.</li>
+  <li><b>CA</b>: +1 SMSS por RTT.</li>
+</ul>
+
+<h3><span class="tag">B</span> ACKs acumulativos con segmentos fuera de orden — ej. 4</h3>
+<p>Método: numerá los bytes (1–100, 101–250, 251–450, 451–750). El receptor manda un ACK por cada segmento que llega, con el valor <b>"próximo byte que espero"</b>. Si llega un segmento después de un hueco, se repite el ACK anterior (ACK duplicado). Cuando llega el que faltaba, el ACK salta hasta el final de lo contiguo. Después aplicá Slow Start a cada ACK: <span class="f">CWND += min(N, SMSS)</span>, donde N son los bytes <b>nuevos</b> que reconoce ese ACK (los duplicados reconocen 0 bytes nuevos). Revisá también si llegan a ser 3 duplicados (acá no: hay menos segmentos).</p>
+
+<h3><span class="tag">C</span> Estimación de RTT / RTO — ej. 5</h3>
+<p>Armá una tabla con estas columnas: <span class="f">i | Sample | RTT est. | RTO</span>. Arrancá con RTT₀ = primera muestra (lo dice el enunciado). Para cada ACK nuevo, primero chequeá si <b>Sample &gt; RTO vigente</b> (si es así, hubo timeout) y recién después actualizá el estimado y el RTO. Repetí para cada α. Lo que el ejercicio quiere que veas: con α alto el RTO es estable pero lento para reaccionar; con α bajo sigue a la última muestra, así que después de una muestra chica (20 ms) el RTO baja mucho y la siguiente muestra grande da timeout.</p>
+
+<h3><span class="tag">D</span> Trazas de CWND por RTT — ej. 6, 9, 10, 11 (los más "de parcial")</h3>
+<p>Siempre la misma tabla:</p>
+<table>
+<tr><th>RTT</th><th>CWND</th><th>SSTHRESH</th><th>se envía = min(CWND, RWND, lo que falta)</th><th>¿pérdida?</th><th>acumulado</th></tr>
+<tr><td>1</td><td>4</td><td>64</td><td>4</td><td>no</td><td>4</td></tr>
+<tr><td>…</td><td>×2 o +2</td><td></td><td></td><td></td><td></td></tr>
+</table>
+<ul>
+  <li>Cada fila es <b>1 RTT</b>, y el tiempo total es (cantidad de filas) × RTT. Por ejemplo, en el ej. 6 contás cuántos RTT hacen falta hasta que CWND ≥ RWND (24 KB): 4 → 8 → 16 → 32, recortado por RWND = 24.</li>
+  <li>"<b>Ráfagas de X KB o más se pierden enteras</b>" → si lo que se envía en ese RTT es ≥ X, esa fila es una pérdida por <b>timeout</b>: SSTHRESH = max(Flight/2, 4 KB), CWND = 2 KB, y esos datos <b>no cuentan</b> como enviados (se reenvían).</li>
+  <li>Si RWND &lt; X, <b>nunca</b> llegás a congestionar: CWND queda topeada por RWND. Es la clave del ej. 11b: anunciar <i>menos</i> ventana (18 KB &lt; 20 KB) puede hacer que la transferencia sea <b>más rápida</b>.</li>
+  <li><b>Estado estacionario</b>: el momento en que SSTHRESH deja de cambiar entre un ciclo y el siguiente.</li>
+  <li>El tiempo que se pierde esperando el timeout depende de qué asumas para el RTO. Lo normal es contarlo como un RTT más (o lo que diga el enunciado). <b>Escribí el supuesto.</b></li>
+  <li>Ej. 9 (1 GB): hacé un par de ciclos hasta el estacionario, calculá <b>bytes por ciclo</b> y <b>RTTs por ciclo</b>, y multiplicá. Sin congestión: llegás a RWND = 64 KB y después mandás 64 KB por RTT.</li>
+</ul>
+
+<h3><span class="tag">E</span> Graficar — ej. 8</h3>
+<p>Graficá CWND en función del tiempo, con una pérdida cada 1 s, en dos versiones. <b>Sin FR/FR</b> cada pérdida es timeout: caída a 1 SMSS, rampa exponencial hasta SSTHRESH y después lineal (curva azul). <b>Con FR/FR</b>, caída a SSTHRESH = Flight/2 y lineal (curva naranja, diente de sierra). En ambos casos marcá el valor de SSTHRESH después de cada pérdida.</p>
+
+<h3><span class="tag">F</span> Interpretar una tabla — ej. 12</h3>
+<p>Lo que hay que mirar: <b>CWND vs. FlightSize</b> (si FlightSize &lt; CWND, la ventana no es lo que limita: la app no tiene datos o RWND es menor), <b>los saltos de CWND</b> (×2 es SS, +1 SMSS es CA, caída a 1 SMSS es timeout, caída a la mitad es FR/FR) y <b>LBS</b> (LastByteSent: cuánto avanzó realmente el envío). Con la regla FlightSize/2 calculás qué SSTHRESH quedó después de la caída, y con eso explicás las filas siguientes.</p>
+
+<div class="box"><b>Para escribir en el parcial:</b> antes de los números, poné siempre los supuestos (ACK por segmento, convención en el borde CWND = SSTHRESH, cuánto dura el timeout, si contás en KB o en segmentos). En esta materia la justificación vale tanto como el número.</div>
+
+</body>
+</html>
