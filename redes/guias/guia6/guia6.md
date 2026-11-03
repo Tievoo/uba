@@ -337,19 +337,100 @@ No es una imagen real sino un **pixel de rastreo**: al pedirlo, el servidor regi
 
 ## Ejercicio 11
 
-Asumimos HTTP 1.1 para todo esto.
+**Supuestos**
+- HTTP/1.1 con conexiones persistentes. Una conexión TCP por host.
+- La PC tiene un **stub resolver** que hace consultas **recursivas** a su resolver. El resolver hace consultas **iterativas** y arranca con la caché vacía; lo que va aprendiendo no expira.
+- Las zonas akamai.com y spameitor.com no se dan: sus NS e IPs son supuestos (`x.x.x.x`).
 
-Primero hay un DNS recursivo para buscar el A de www.jmail.com
-primero a root, despues a com, despues a jmail.com (que probablemente trae www, pero ponele que lo calzamos igual).
-Listo, tenemos el A, hacemos el HTTP, para traernos el HTML.
+**Ojo con el archivo de zona.** Es la zona de **jmail.com**, y los nombres sin punto final son relativos a ella:
+- `ads` es `ads.jmail.com`, no `ads.spameitor.com`.
+- `cdn.akamai.com` (sin punto) es `cdn.akamai.com.jmail.com`.
 
+Además, ns.jmail.com no es autoritativo para akamai.com ni para spameitor.com. Por eso **esos registros no se usan** para resolver lo que pide el HTML. (Lo normal sería al revés: `recursos.jmail.com CNAME cdn.akamai.com`.)
+
+Tampoco se usan MX, mailserver ni elmailserver: es webmail y la bandeja viene dentro del HTML.
+
+### 1. www.jmail.com → HTML
+
+**DNS**
+
+| # | De → A | Tipo | Mensaje |
+|---|---|---|---|
+| 1 | PC → resolver | recursiva | `www.jmail.com A?` |
+| 2 | resolver → raíz | iterativa | `www.jmail.com A?` |
+| 3 | raíz → resolver | referral | AUTHORITY: NS de `com.` · ADDITIONAL: A de esos NS (glue) |
+| 4 | resolver → NS de com | iterativa | `www.jmail.com A?` |
+| 5 | NS de com → resolver | referral | AUTHORITY: `jmail.com NS ns.jmail.com` · ADDITIONAL: `ns.jmail.com A 208.190.1.26` (glue) |
+| 6 | resolver → ns.jmail.com | iterativa | `www.jmail.com A?` |
+| 7 | ns.jmail.com → resolver | **autoritativa (aa)** | ANSWER: `www.jmail.com A 208.190.1.20` |
+| 8 | resolver → PC | respuesta | `www.jmail.com A 208.190.1.20` (el resolver la guarda en caché) |
+
+**TCP #1** con 208.190.1.20:80 (3-way handshake), y después:
+```
 GET / HTTP/1.1
-...
-
+Host: www.jmail.com
+User-Agent: Firefox
+(línea en blanco)
+```
+```
 HTTP/1.1 200 OK
 Content-Type: text/html
-Content-Length: 34212
+Content-Length: 712
+(línea en blanco)
+<html> ... (el HTML del enunciado)
+```
 
-De ahí se haran requests a lo necesario. son solo dos por ahora. Ojo, en el registro de dns aparece "ads" solo, pero yo necesito ads.spameitor.com. doy por asumido que es eso. 
+El navegador parsea el HTML. Se cargan solos el `<img>` y el `<iframe>`. Los `<button>` no generan pedidos sin un clic.
 
-Hacemos un GET para laimagen el-logo-de-jmail.png (no quiero escribirlo bien, despues lo hace claude). Para eso, cname de cdn.akamai.com? no se como funcionaria. 
+### 2. Logo: cdn.akamai.com
+
+**DNS.** El resolver ya tiene en caché los NS de `com.`, así que **no vuelve a la raíz**:
+
+| # | De → A | Tipo | Mensaje |
+|---|---|---|---|
+| 1 | PC → resolver | recursiva | `cdn.akamai.com A?` |
+| 2 | resolver → NS de com | iterativa | `cdn.akamai.com A?` |
+| 3 | NS de com → resolver | referral | NS de akamai.com + glue |
+| 4 | resolver → NS de akamai.com | iterativa | `cdn.akamai.com A?` |
+| 5 | NS de akamai.com → resolver | autoritativa (aa) | `cdn.akamai.com A x.x.x.x` (supuesto) |
+| 6 | resolver → PC | respuesta | `cdn.akamai.com A x.x.x.x` |
+
+**TCP #2** con x.x.x.x:80, y después:
+```
+GET /el-logo-de-jmail.png HTTP/1.1
+Host: cdn.akamai.com
+Referer: http://www.jmail.com/
+(línea en blanco)
+```
+```
+HTTP/1.1 200 OK
+Content-Type: image/png
+Content-Length: 15320
+(línea en blanco)
+<bytes del PNG>
+```
+
+### 3. Publicidad: ads.spameitor.com (iframe)
+
+**DNS.** Igual que el paso 2: PC → resolver (recursiva), luego resolver → NS de com (de caché) → referral a los NS de spameitor.com, y por último NS de spameitor.com → `ads.spameitor.com A y.y.y.y` (aa, supuesto).
+
+**TCP #3** con y.y.y.y:80, y después:
+```
+GET / HTTP/1.1
+Host: ads.spameitor.com
+Referer: http://www.jmail.com/
+(línea en blanco)
+```
+```
+HTTP/1.1 200 OK
+Content-Type: text/html
+Content-Length: 2048
+(línea en blanco)
+<html> ... (la publicidad)
+```
+
+El iframe es **otra página HTML**: si referencia más recursos, el navegador los pide igual que en el paso 1 (más DNS, y más TCP por cada host nuevo). Como no conocemos ese HTML, asumimos que no trae nada más.
+
+### Conexiones TCP
+
+**3**: una por host (www.jmail.com, cdn.akamai.com, ads.spameitor.com). El DNS va por **UDP** y no cuenta. Con HTTP/1.0 serían también 3, porque hay un solo objeto por host; si hubiera varios objetos en el mismo host, 1.0 abriría una conexión por objeto.
