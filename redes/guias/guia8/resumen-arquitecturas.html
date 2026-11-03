@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Resumen Arquitecturas</title>
+<style>
+  @page { size: A4; margin: 14mm 14mm; }
+  :root { --ink:#1b1b1b; --muted:#555; --accent:#1f6fb2; --warn:#b3261e; --box:#f3f6fa; --line:#d6dde6; }
+  body { font-family: "Segoe UI", Arial, sans-serif; font-size: 10.5pt; line-height: 1.38; color: var(--ink); background:#fff; margin:0; }
+  h1 { font-size: 18pt; margin: 0 0 2px; }
+  .sub { color: var(--muted); margin: 0 0 12px; }
+  h2 { font-size: 13pt; color: var(--accent); border-bottom: 2px solid var(--accent); padding-bottom: 2px; margin: 18px 0 8px; break-after: avoid; }
+  h3 { font-size: 11pt; margin: 12px 0 4px; break-after: avoid; }
+  p { margin: 4px 0 6px; }
+  ul, ol { margin: 4px 0 6px; padding-left: 18px; }
+  li { margin: 2px 0; }
+  code, .f, pre { font-family: Consolas, "Courier New", monospace; font-size: 9.4pt; }
+  pre { background:#f6f6f6; border:1px solid var(--line); padding:6px 8px; margin:6px 0; white-space: pre-wrap; break-inside: avoid; }
+  .box { background: var(--box); border-left: 4px solid var(--accent); padding: 6px 10px; margin: 8px 0; break-inside: avoid; }
+  .warn { background: #fdf1f0; border-left: 4px solid var(--warn); padding: 6px 10px; margin: 8px 0; break-inside: avoid; }
+  table { border-collapse: collapse; width: 100%; margin: 6px 0 8px; break-inside: avoid; }
+  th, td { border: 1px solid var(--line); padding: 3px 6px; text-align: left; vertical-align: top; }
+  th { background: #e8eef5; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+</style>
+</head>
+<body>
+
+<h1>Arquitecturas — Guía 8</h1>
+<p class="sub">RCCD 2C 2026 · Resumen de las prácticas de Arquitecturas (estilos y coordinación del 22/10, middleware y organización física del 27/10), la teórica 15 (Cómputo distribuido: Cloud, Fog, Edge) y las notas de Relojes de Lamport y TrueTime. Bibliografía: van Steen &amp; Tanenbaum, <i>Distributed Systems</i>, 4ª ed., cap. 2.</p>
+
+<h2>0 · La idea en criollo</h2>
+<ul>
+  <li>Un sistema distribuido es un <b>montón de programas en máquinas distintas que se hablan por mensajes</b> y que el usuario ve como uno solo.</li>
+  <li>La <b>arquitectura</b> responde a dos preguntas:
+    <ul>
+      <li><b>Lógica (de software):</b> qué piezas hay (<b>componentes</b>), cómo se hablan (<b>conectores</b>) y con qué estilo.</li>
+      <li><b>Física (de sistema):</b> en qué máquina corre cada pieza (cliente, servidor, P2P, cloud / fog / edge).</li>
+    </ul></li>
+  <li>Casi todos los ejercicios son de <b>diseño y justificación</b>: dibujás cajas y flechas, ponés el protocolo en cada flecha y explicás por qué.</li>
+</ul>
+<div class="box"><b>Receta para cualquier ejercicio de diseño (ej. 1, 2, 3, 4, 10)</b>
+<ol>
+  <li><b>Componentes</b> (cajas): listarlos y, para cada uno, su <b>interfaz</b> (las operaciones que ofrece), su <b>procesamiento</b> y sus <b>datos</b>.</li>
+  <li><b>Conectores</b> (flechas): etiquetar cada uno con el <b>mecanismo / protocolo</b> (HTTP/TLS, SQL, RPC, WebSocket, SMTP, cola, pub/sub).</li>
+  <li><b>Niveles lógicos</b>: marcar qué parte es interfaz, cuál procesamiento y cuál datos.</li>
+  <li><b>Coordinación</b>: para cada conexión, preguntarse si el emisor tiene que saber quién es el receptor y si el receptor tiene que estar vivo en ese momento. Eso la ubica en la matriz de acoplamiento.</li>
+  <li><b>Ubicación física</b> (si la piden): en qué máquina o capa (cliente / servidor / edge / fog / cloud) corre cada componente, y por qué (latencia, volumen de datos, autonomía, regulación).</li>
+  <li>Escribir los <b>supuestos</b>.</li>
+</ol></div>
+
+<h2>1 · Componentes, conectores, estilos</h2>
+<ul>
+  <li><b>Componente</b>: unidad modular con <b>interfaces provistas y requeridas</b> bien definidas, <b>reemplazable</b> dentro de su entorno. Se puede reemplazar, incluso con el sistema andando, <b>solo si su interfaz no cambia</b>.</li>
+  <li><b>Conector</b>: mecanismo que media la comunicación, coordinación o cooperación entre componentes: llamadas a procedimiento (locales o <b>remotas</b>, RPC), pasaje de mensajes, streams de datos.</li>
+  <li><b>Estilo arquitectónico</b>: se define por los componentes, cómo se conectan, qué datos intercambian y cómo se configuran juntos. Los principales son <b>en capas</b>, <b>orientado a servicios</b> y <b>publish-subscribe</b>. En la práctica se combinan.</li>
+  <li><b>Servicio / interfaz / protocolo</b>:
+    <ul>
+      <li><b>Servicio</b>: lo que ofrece una capa (por ejemplo, transporte confiable).</li>
+      <li><b>Interfaz</b>: cómo se accede al servicio (<span class="f">socket(), connect(), send(), recv()</span>). Oculta la implementación.</li>
+      <li><b>Protocolo</b>: las reglas del intercambio entre las partes (TCP). Además puede haber un protocolo de aplicación implícito, por ejemplo un eco que agrega un "*".</li>
+    </ul></li>
+</ul>
+<h3>Tres niveles lógicos de una aplicación</h3>
+<table>
+<tr><th>Nivel</th><th>Qué hace</th><th>Ejemplo (buscador de alquileres, ej. 1b)</th></tr>
+<tr><td><b>Interfaz</b></td><td>Interacción con el usuario o con otra aplicación externa</td><td>El navegador de cada PC: 10 instancias del mismo componente</td></tr>
+<tr><td><b>Procesamiento</b></td><td>El núcleo funcional</td><td>El sitio web: genera las consultas, las ordena por relevancia (ranking) y arma el HTML</td></tr>
+<tr><td><b>Datos</b></td><td>Opera sobre una base de datos o un sistema de archivos</td><td>El almacenamiento distribuido del datacenter</td></tr>
+</table>
+<p>Conectores en ese ejemplo: <b>HTTP/TLS</b> (request-reply) entre navegador y sitio, y <b>SQL o RPC</b> entre sitio y almacenamiento. Son niveles <b>lógicos</b>, no máquinas: los tres podrían correr en una sola.</p>
+<p>Si el sitio es <b>stateless</b> (no guarda estado entre pedidos), se puede <b>replicar</b> y repartir la carga entre réplicas.</p>
+
+<h2>2 · Estilos</h2>
+<ul>
+  <li><b>En capas</b>: cada capa usa los servicios de la de abajo. El problema son las <b>dependencias fuertes</b>: el caso de <i>left-pad</i>, una dependencia de NPM que al retirarla rompió miles de programas.</li>
+  <li><b>Orientado a servicios</b>:
+    <ul>
+      <li><b>Objetos</b>: estado + métodos; el conector es una llamada (posiblemente remota); son reemplazables si se mantiene la interfaz.</li>
+      <li><b>Microservicios</b>: cada uno es un proceso de red separado; la clave es la modularización.</li>
+      <li><b>Composición de servicios de grano grueso</b>: servicios grandes, posiblemente de <b>otras organizaciones</b> (un sistema de pagos, el correo). La integración no es trivial porque cada uno tiene su propia interfaz.</li>
+    </ul></li>
+  <li><b>REST</b> (basado en recursos):
+    <ol>
+      <li>Los recursos se nombran con <b>URIs</b>.</li>
+      <li>Todos ofrecen la <b>misma interfaz</b>: <span class="f">PUT</span> (modifica), <span class="f">POST</span> (crea), <span class="f">GET</span> (lee), <span class="f">DELETE</span> (borra).</li>
+      <li>Los mensajes son <b>autodescriptos</b>.</li>
+      <li>La ejecución es <b>stateless</b>.</li>
+    </ol></li>
+  <li><b>Publish-subscribe</b>: se separa el <b>procesamiento</b> (cada proceso es autónomo) de la <b>coordinación</b> (cómo se comunican). Los procesos <b>publican eventos</b> y se <b>suscriben</b> a los que les interesan <b>sin conocerse entre sí</b>. Sirve cuando los procesos entran y salen seguido y conviene que las dependencias sean débiles.</li>
+</ul>
+
+<h2>3 · Coordinación: la matriz de acoplamiento (ej. 2, 3, 4)</h2>
+<ul>
+  <li><b>Acoplamiento referencial</b>: para comunicarse, un proceso tiene que <b>conocer el nombre o identificador</b> del otro.</li>
+  <li><b>Acoplamiento temporal</b>: los dos tienen que estar <b>andando al mismo tiempo</b>.</li>
+</ul>
+<table>
+<tr><th></th><th>Temporalmente acoplado</th><th>Temporalmente desacoplado</th></tr>
+<tr><th>Ref. acoplado</th><td><b>Directa</b>: llamada telefónica · RPC · HTTP request-reply · redirect · webhook</td><td><b>Mailbox</b>: mail, mensaje de voz, cola de un receptor. El buzón se direcciona explícitamente, pero no hace falta estar activos a la vez.</td></tr>
+<tr><th>Ref. desacoplado</th><td><b>Event-based</b>: radio en vivo, alarma de incendio, pub/sub que <b>entrega el dato</b>. No se conocen, pero el suscriptor tiene que estar vivo cuando se publica.</td><td><b>Shared data space</b>: cartelera de avisos, tuple space, cola compartida de trabajos, pub/sub que <b>almacena</b>. Lectura por <b>patrón</b> (búsqueda asociativa).</td></tr>
+</table>
+<p>Para cada flecha del diseño hay que contestar: <b>¿el emisor sabe quién es el receptor?</b> y <b>¿el receptor tiene que estar vivo en ese momento?</b></p>
+
+<h3>Ejemplo resuelto en clase: compra de un e-book (ej. 2)</h3>
+<table>
+<tr><th>Conexión</th><th>Referencial</th><th>Temporal</th><th>Tipo</th></tr>
+<tr><td>Navegador → storage (GET a una URL firmada)</td><td>Acoplado (conoce la URI)</td><td>Acoplado (request-reply)</td><td>Directa</td></tr>
+<tr><td>Sitio → correo (SMTP)</td><td>Acoplado (servidor y casilla de destino)</td><td>Desacoplado (store-and-forward)</td><td>Mailbox</td></tr>
+<tr><td>Correo → cliente (IMAP / webmail)</td><td>Acoplado (su casilla)</td><td>Desacoplado</td><td>Mailbox</td></tr>
+<tr><td>Sitio → pagos (redirect HTTP 302 a través del navegador)</td><td>Acoplado</td><td>Acoplado</td><td>Directa</td></tr>
+<tr><td>Pagos → sitio (<b>webhook</b>, la confirmación confiable)</td><td>Acoplado (URL de notificación)</td><td>Acoplado</td><td>Directa</td></tr>
+</table>
+<p>Interfaces: sitio (<span class="f">buscar, agregarCarrito, generarPedido, confirmarPedido</span>) · storage (<span class="f">obtenerURLFirmada, descargarLibro</span>) · correo (<span class="f">enviar(destino, url)</span>) · pagos (<span class="f">iniciarPago(monto, urlRetorno)</span>). El libro <b>no pasa por el sitio</b>: el navegador lo baja directo del storage con una URL firmada que vence.</p>
+
+<h3>Pub/sub: arquitecturas y suscripciones</h3>
+<ul>
+  <li><b>Event-based</b> (event bus) vs <b>shared data space</b> (espacio persistente). En los dos, los procesos no tienen referencias explícitas entre sí. Se suelen combinar: te suscribís con un patrón y te notifican cuando alguien inserta una tupla que coincide.</li>
+  <li><b>Topic-based</b> = pares <b>(atributo, valor)</b>, por ejemplo <span class="f">(tema, alertas)</span>. <b>Content-based</b> = pares <b>(atributo, rango)</b>, por ejemplo <span class="f">(temperatura, [35, ∞))</span>. Cuanto más expresiva la suscripción, más caro el <b>matching</b> en el middleware.</li>
+  <li><b>¿La notificación lleva el dato o solo un aviso?</b>
+    <ul>
+      <li><b>Con el dato</b>: el middleware no guarda nada, así que queda <b>temporalmente acoplado</b>.</li>
+      <li><b>Solo aviso</b>, y el suscriptor lee después: el middleware <b>guarda</b> el dato (con un <b>lease</b>, o sea un tiempo de retención), así que desacopla también en el tiempo.</li>
+    </ul></li>
+</ul>
+<h3>Ejemplo resuelto en clase: simulaciones de 10–15 min con más de 100 clientes (ej. 3)</h3>
+<pre>1. Cliente  → API de simulaciones : pedido(parámetros)  → devuelve jobId
+2. Cliente  → middleware pub/sub  : suscribir(job.&lt;jobId&gt;.done)
+3. API      → cola compartida     : encolar(job)
+4. Worker   ← cola                : tomar(job)          (corre 10–15 min)
+5. Worker   → almacén de resultados: guardar(resultado)
+6. Worker   → middleware          : publicar(job.&lt;jobId&gt;.done, URI)
+7. Middleware → cliente           : notificar(URI)
+8. Cliente  → almacén             : GET URI</pre>
+<table>
+<tr><th></th><th>Event-based</th><th>Shared data space</th></tr>
+<tr><td>Acoplamiento</td><td>Ref. desacoplado, temp. acoplado</td><td>Desacoplado en los dos ejes</td></tr>
+<tr><td>Cliente desconectado cuando termina el job</td><td><b>Pierde</b> la notificación</td><td>Lee el resultado cuando vuelve</td></tr>
+<tr><td>Almacenamiento en el middleware</td><td>No</td><td>Sí, con leases</td></tr>
+<tr><td>Latencia de entrega</td><td>Menor</td><td>Mayor (hay una lectura posterior)</td></tr>
+</table>
+<ul>
+  <li>Con trabajos de 15 min y más de 100 clientes manda el desacople temporal: <b>shared data space</b>, o pub/sub con suscripciones persistentes.</li>
+  <li>Se notifica <b>con la URI</b>, sin adjuntar el resultado:
+    <ul>
+      <li>los resultados son grandes;</li>
+      <li>la descarga se puede reanudar si se corta;</li>
+      <li>la retención se maneja con leases.</li>
+    </ul></li>
+  <li>Dimensionar workers: con una ráfaga de 100 pedidos, la última tanda termina a <span class="f">⌈100/W⌉ × 15 min</span>. Para que nadie espere más de 30 min, W ≥ 50.</li>
+</ul>
+
+<h2>4 · Middleware, wrappers y broker (ej. 5)</h2>
+<ul>
+  <li><b>Middleware</b>: capa lógica entre las aplicaciones y los SO locales, que se extiende sobre todas las máquinas y ofrece <b>la misma interfaz</b> en todas. Es al sistema distribuido lo que el SO a una computadora: comunicación, seguridad, enmascaramiento de fallas, y oculta las diferencias de hardware y SO.</li>
+  <li><b>Wrapper (adapter)</b>: le ofrece a una aplicación <b>la interfaz que ella espera</b> y traduce cada llamada a las funciones de otro componente. Si cambia la interfaz de un componente, hace falta un wrapper para no tocar a quienes lo usan. Se cuenta <b>un wrapper por cada par</b> (quien llama, interfaz que espera) → componente destino.</li>
+  <li><b>Broker (mediator)</b>: componente <b>lógicamente centralizado</b> por el que pasan todos los accesos. Conoce a todas las aplicaciones y transforma y combina pedidos y respuestas.</li>
+</ul>
+<table>
+<tr><th>N aplicaciones, todas contra todas</th><th>N = 2</th><th>3</th><th>5</th><th>20</th><th>100</th></tr>
+<tr><td>Sin broker: <b>N(N−1)</b> (un wrapper por cada par ordenado)</td><td>2</td><td>6</td><td>20</td><td>380</td><td>9.900</td></tr>
+<tr><td>Con broker: <b>2N</b> (ida y vuelta de cada aplicación al broker)</td><td>4</td><td>6</td><td>10</td><td>40</td><td>200</td></tr>
+</table>
+<ul>
+  <li>El broker conviene desde <b>N = 4</b>: <span class="f">N(N−1) &gt; 2N ⇔ N &gt; 3</span>.</li>
+  <li>A cambio, el broker es un punto central: <b>cuello de botella</b>, <b>punto único de falla</b> y un <b>salto extra</b> en cada llamada.</li>
+</ul>
+
+<h2>5 · Organización física: cliente-servidor y tiers</h2>
+<h3>Cliente-servidor (request-reply)</h3>
+<ul>
+  <li>El <b>servidor</b> implementa un servicio; el <b>cliente</b> lo pide y espera la respuesta. Un servidor también puede ser cliente de otro.</li>
+  <li>Sin conexión (<b>UDP</b>) es eficiente si la red es confiable (una LAN). Con conexión (<b>TCP</b>) es lo habitual en Internet, pero armar y cerrar la conexión cuesta, sobre todo con mensajes chicos.</li>
+</ul>
+<h3>¿Y si se pierde un mensaje? Idempotencia (ej. 6)</h3>
+<p>Supuesto: el cliente espera la respuesta con un timeout y puede retransmitir. Ante un timeout, el cliente <b>no puede distinguir</b> entre tres casos:</p>
+<ol>
+  <li>se perdió el pedido;</li>
+  <li>el servidor cayó antes de procesar;</li>
+  <li>se procesó y <b>se perdió el OK</b>.</li>
+</ol>
+<ul>
+  <li><b>Si retransmite</b>: en el caso 3 la transferencia se ejecuta <b>dos veces</b>.</li>
+  <li><b>Si no retransmite</b>: en los casos 1 y 2 la transferencia <b>nunca se ejecuta</b>, y el cliente no lo sabe.</li>
+  <li>El problema de fondo: <b>transferir no es idempotente</b>. Una operación idempotente se puede repetir sin daño: "¿cuánto saldo tengo?" sí lo es; "transferir $10.000", no.</li>
+  <li>Soluciones:
+    <ul>
+      <li><b>Identificador de transacción</b>: el cliente numera cada pedido y el servidor recuerda los que ya atendió. Ante un reintento reenvía la respuesta sin repetir la operación, así que se ejecuta <b>a lo sumo una vez</b>. (¿Hasta cuándo guarda esos números?)</li>
+      <li><b>Hacer idempotente la operación</b>: en lugar de "transferir $100", "crear la transferencia #7 por $100". Si llega dos veces, la segunda no hace nada.</li>
+    </ul></li>
+  <li><b>Con TCP no alcanza</b>: si la conexión se corta después de transferir y antes del OK, vuelve la misma ambigüedad. <b>Transporte confiable ≠ operación confiable.</b></li>
+</ul>
+<h3>Dos tiers físicos: ¿dónde se corta?</h3>
+<p>Las organizaciones (a)–(e) reparten interfaz / aplicación / datos entre la máquina cliente y la servidora. Si una capa aparece en las dos máquinas, está <b>partida</b> entre ellas:</p>
+<table>
+<tr><th>Org.</th><th>En el cliente</th><th>En el servidor</th><th>Ejemplo</th></tr>
+<tr><td>(a)</td><td>parte de la interfaz</td><td>resto de la interfaz + aplicación + datos</td><td>Terminal; el servidor controla la presentación</td></tr>
+<tr><td>(b)</td><td>toda la interfaz</td><td>aplicación + datos</td><td>Navegador con HTML</td></tr>
+<tr><td>(c)</td><td>interfaz + parte de la aplicación</td><td>resto de la aplicación + datos</td><td>El cliente valida un formulario antes de mandarlo</td></tr>
+<tr><td>(d)</td><td>interfaz + aplicación</td><td>datos</td><td>App bancaria que arma las transacciones en el cliente y las sube</td></tr>
+<tr><td>(e)</td><td>interfaz + aplicación + parte de los datos (caché local)</td><td>datos</td><td>Trabajo offline con sincronización</td></tr>
+</table>
+<ul>
+  <li><b>Clientes livianos (thin), (a)–(c)</b>: fáciles de administrar, poco software en el usuario y poca dependencia de su plataforma, pero interfaz menos sofisticada.</li>
+  <li><b>Clientes pesados (fat), (d)–(e)</b>: suites de oficina, multimedia, trabajo sin conexión.</li>
+</ul>
+<h3>Ejemplo resuelto en clase: validar un formulario de 20 campos (ej. 7.1)</h3>
+<table>
+<tr><th></th><th>En el cliente</th><th>En el servidor</th></tr>
+<tr><td>Ventajas</td><td>Respuesta inmediata; menos pedidos y menos carga en el servidor</td><td><b>No se puede saltear</b>; una sola implementación, actualizada en un solo lugar</td></tr>
+<tr><td>Desventajas</td><td><b>Se puede saltear</b> editando el JavaScript; hay campos que no se pueden verificar en el cliente (unicidad, datos de la base)</td><td>Cada error cuesta un viaje de ida y vuelta; más carga en el servidor</td></tr>
+</table>
+<p>Conviene validar <b>en los dos lados</b>: en el cliente por usabilidad y en el servidor por seguridad.</p>
+<h3>Tres tiers (multi-tiered)</h3>
+<ul>
+  <li><b>Cliente → servidor de aplicación → servidor de base de datos</b>. El servidor de aplicación es a su vez <b>cliente</b> del de datos. Por ejemplo: un servidor web, detrás un servidor de aplicación, y detrás la base.</li>
+  <li><b>Distribución vertical</b>: componentes lógicamente <b>distintos</b> en máquinas distintas. Es lo que hacen las arquitecturas multi-tier.</li>
+  <li><b>Distribución horizontal</b>: un cliente o servidor partido en partes <b>equivalentes</b>, cada una con su porción de los datos (por ejemplo, servidores para A–H, I–P y Q–Z). Reparte la carga. <b>P2P</b> es la distribución horizontal llevada al extremo.</li>
+</ul>
+
+<h2>6 · Peer-to-peer y overlays (ej. 8, 9)</h2>
+<ul>
+  <li><b>P2P</b>: todos los procesos son iguales; cada uno es cliente y servidor a la vez.</li>
+  <li><b>Overlay network</b>: los nodos son <b>procesos</b> y los enlaces son <b>canales lógicos</b> (a menudo conexiones TCP). Cada nodo solo le habla a sus vecinos. <b>No es la red física</b>: son procesos y canales, no cables ni radios. Puede ser estructurada o no estructurada.</li>
+</ul>
+<h3>Estructurado: tablas de hash distribuidas (DHT)</h3>
+<ul>
+  <li>Topología <b>determinística</b> (anillo, árbol, grilla).</li>
+  <li>Cada dato tiene una clave, <span class="f">clave = hash(dato)</span>. Cada nodo tiene un id del mismo espacio y guarda un rango de claves.</li>
+  <li>La operación básica es <span class="f">nodo = lookup(clave)</span>: el pedido se rutea por la topología.</li>
+  <li><b>Chord</b> (anillo):
+    <ul>
+      <li>La clave k la guarda <span class="f">succ(k)</span>, el primer nodo con id ≥ k.</li>
+      <li>Cada nodo tiene <b>atajos</b> (finger table) a otros nodos. Un lookup avanza lo más lejos posible sin pasarse, así que tarda <b>O(log N)</b> saltos.</li>
+      <li>Al entrar o salir, un nodo solo intercambia claves con su sucesor.</li>
+    </ul></li>
+</ul>
+<h3>No estructurado: hay que buscar</h3>
+<ul>
+  <li>Cada nodo tiene una lista <b>ad hoc</b> de vecinos, así que la overlay es un grafo aleatorio. Al entrar, el nodo pide una lista inicial a un nodo conocido.</li>
+  <li><b>Flooding</b>: el pedido va a <b>todos</b> los vecinos. Quien ya lo vio lo ignora; quien tiene el dato responde y, si no, lo reenvía. Un <b>TTL</b> limita los saltos. Es rápido pero genera mucho tráfico.</li>
+  <li><b>Random walk</b>: el pedido va a <b>un</b> vecino al azar, que hace lo mismo. Genera mucho menos tráfico, pero tarda más. Con n caminatas en paralelo, el tiempo baja unas n veces.</li>
+  <li>Quien tiene el dato responde con un <b>aviso corto</b> (qué tiene, su IP y su puerto), directo o por el camino inverso. Después el solicitante abre una <b>conexión directa</b> y baja el dato, que <b>no pasa por la overlay</b>.</li>
+</ul>
+<div class="box"><b>Fórmulas de búsqueda</b>. N nodos, cada dato replicado en r nodos al azar, d vecinos por nodo.
+<ul>
+  <li><b>Random walk</b>: <span class="f">P[encontrar en el intento k] = (r/N)(1 − r/N)<sup>k−1</sup></span>. En promedio se consultan <span class="f">S ≈ N/r</span> nodos, uno detrás de otro.</li>
+  <li><b>Flooding</b>: después de k pasos alcanza a lo sumo <span class="f">R(k) = d(d−1)<sup>k−1</sup></span> nodos. Lo encuentra cuando <span class="f">(r/N)·R(k) ≥ 1</span>.</li>
+</ul>
+Ejemplo: N = 100.000, r = 100, d = 10. Random walk necesita S ≈ 1000 nodos. Flooding necesita R(k) ≥ 1000: con R(3) = 810 no alcanza y con R(4) = 7290 sí, así que son 4 pasos y unos 7290 nodos tocados.</div>
+<h3>Ejemplo resuelto en clase: distribuir un tar.gz de 1 TB (ej. 9)</h3>
+<p>Ojo: la clase usó una versión con <b>100 ms de propagación y 1 Gbps</b>; la guía dice <b>200 ms de RTT</b>. Lo que importa es el modelo.</p>
+<ul>
+  <li><b>Datos</b>:
+    <ul>
+      <li><span class="f">1 TB / 100 MB = 10.000 piezas</span>.</li>
+      <li><span class="f">100 servidores × 1000 piezas = 100.000</span> piezas guardadas, así que cada pieza está en <b>10 servidores</b> (r/N = 10%).</li>
+      <li>Transmitir una pieza: <span class="f">800 Mb / 1 Gbps = 0,8 s</span>.</li>
+    </ul></li>
+  <li><b>Modelo</b> (escribir los supuestos):
+    <ol>
+      <li>El pedido recorre h saltos por la overlay y el aviso vuelve por el mismo camino.</li>
+      <li>Después, el nodo pide la pieza directo al servidor que la tiene.</li>
+      <li>Las piezas se bajan de a una.</li>
+    </ol>
+    <span class="f">T<sub>pieza</sub> = (2h + 2)·100 ms + 0,8 s</span>.</li>
+  <li><b>Flooding</b> (d = 10):
+    <ul>
+      <li>Paso 1: R(1) = 10, así que en promedio 1 vecino tiene la pieza. Ninguno la tiene con probabilidad <span class="f">0,9<sup>10</sup> ≈ 0,35</span>.</li>
+      <li>Paso 2: casi seguro la encuentra.</li>
+      <li><span class="f">E[h] = 0,65·1 + 0,35·2 = 1,35</span>.</li>
+    </ul></li>
+  <li><b>Random walk</b>: <span class="f">h ≈ N/r = 10</span>.</li>
+  <li><b>Super peer / broker</b>: <span class="f">h = 1</span>, porque sabe quién tiene cada pieza.</li>
+</ul>
+<table>
+<tr><th>Estrategia</th><th>h</th><th>Mensajes por pieza</th><th>Por pieza</th><th>Total (10.000 piezas)</th></tr>
+<tr><td>Flooding (TTL 2)</td><td>1,35</td><td>4,7</td><td>≈ 1,27 s</td><td>≈ 3,5 h</td></tr>
+<tr><td>Random walk</td><td>≈ 10</td><td>≈ 22</td><td>≈ 3,0 s</td><td>≈ 8,3 h (<b>no baja: sube</b>)</td></tr>
+<tr><td>Super peer</td><td>1</td><td>4</td><td>≈ 1,2 s</td><td>≈ 3,3 h (a cambio, punto central)</td></tr>
+</table>
+<h3>P2P jerárquico: super peers</h3>
+<ul>
+  <li>Son nodos especiales que mantienen un <b>índice</b> de los datos o hacen de broker. Cada <b>weak peer</b> se conecta como cliente a un super peer y todo su tráfico pasa por él.</li>
+  <li>Tienen que ser procesos estables y muy disponibles; se pueden emparejar para tener respaldo.</li>
+  <li>Decidir quién es super peer es un problema de <b>elección de líder</b>.</li>
+</ul>
+<h3>Ruteo por vecinos vs anillo (ej. 8.3)</h3>
+<ul>
+  <li><b>Flooding / random walk</b>: no requieren mantener estructura y toleran que la topología cambie (nodos que entran y salen). Como contra, flooding genera mucho tráfico y random walk tiene mucha latencia; ninguno garantiza encontrar el dato si el TTL se agota.</li>
+  <li><b>Anillo</b> (estructurado): el lookup es determinístico, con O(N) saltos en un anillo simple u O(log N) con atajos tipo Chord. Como contra, hay que mantener la estructura cuando los nodos entran o salen, y un nodo caído corta el anillo si no hay atajos ni sucesores de respaldo.</li>
+</ul>
+
+<h2>7 · Cloud, fog y edge (ej. 10)</h2>
+<ul>
+  <li><b>Cloud computing</b>: pool de recursos <b>virtualizados</b> en datacenters, configurable dinámicamente (más trabajo, más recursos) y pago por uso. Se ofrece en tres modelos:
+    <ul>
+      <li><b>IaaS</b>: VMs y almacenamiento.</li>
+      <li><b>PaaS</b>: una API para subir y correr programas.</li>
+      <li><b>SaaS</b>: aplicaciones como Gmail o Docs.</li>
+    </ul>
+    Como arquitectura es un <b>cliente-servidor avanzado</b>: el cliente no sabe dónde está el servidor, que suele estar repartido en todo un datacenter.</li>
+</ul>
+<table>
+<tr><th>Capa</th><th>Dónde</th><th>Latencia típica</th><th>Recursos</th></tr>
+<tr><td><b>Dispositivos</b></td><td>Sensores, autos, celulares</td><td>&lt; 1 ms</td><td>Muy escasos</td></tr>
+<tr><td><b>Edge</b></td><td>Borde de la red de la organización: servidores propios (on-premise), por ejemplo un campus o un aeropuerto; edge de acceso</td><td>1–5 ms</td><td>Escasos y heterogéneos</td></tr>
+<tr><td><b>Fog</b></td><td>Infraestructura intermedia: datacenters regionales compartidos</td><td>5–20 ms</td><td>Medios</td></tr>
+<tr><td><b>Cloud</b></td><td>Datacenters del proveedor, por Internet</td><td>50–150 ms</td><td>"Infinitos"</td></tr>
+</table>
+<p>Más cerca da menos latencia; más lejos da más recursos. Los límites entre capas son difusos.</p>
+<p><b>¿Por qué no ir directo a la nube?</b></p>
+<ol>
+  <li><b>Latencia</b>: unos 100 ms a la nube es inaceptable para coordinar un auto autónomo. Es el argumento más fuerte. La luz en fibra recorre unos 200.000 km/s, o sea que 1 ms de ida y vuelta equivale a unos 100 km.</li>
+  <li><b>Ancho de banda / volumen</b>: 1000 cámaras × 4 Mb/s = 4 Gb/s que no conviene subir. El video necesita la fuente cerca (menos jitter).</li>
+  <li><b>Confiabilidad / autonomía</b>: hospitales y fábricas tienen que seguir operando aunque se corte el enlace.</li>
+  <li><b>Regulación / soberanía</b>: hay datos que no pueden salir, como las historias clínicas.</li>
+</ol>
+<ul>
+  <li><b>Ejemplo de autos en un cruce</b>: cada auto reacciona en tiempo real con sus propios sensores. Para detectarse más allá de lo que ven, le pasan su posición a una <b>infraestructura edge local</b>, que les avisa entre sí. Coordinarse vía la nube no es aceptable.</li>
+  <li><b>Orquestación</b> (qué va dónde):
+    <ul>
+      <li><b>Asignación de recursos</b> (CPU, memoria, red).</li>
+      <li><b>Ubicación de servicios</b> (cuándo y dónde instalar cada uno; con apps móviles, el edge más cercano).</li>
+      <li><b>Selección del edge</b> (el más cercano no siempre es el mejor).</li>
+      <li>El problema de placement es NP-difícil.</li>
+    </ul>
+    <b>Criterio</b>: cada servicio va en la capa que cumple con la latencia que tolera y que ve la parte del sistema que necesita.</li>
+  <li>Problemas nuevos del continuo:
+    <ul>
+      <li><b>Migración con movilidad</b>: el estado sigue al usuario.</li>
+      <li><b>Consistencia entre niveles</b>: fuerte implica latencia de nube; eventual implica conflictos.</li>
+      <li><b>Autonomía ante particiones</b>: CRDTs y relojes híbridos.</li>
+    </ul></li>
+</ul>
+<div class="box"><b>Plantilla para el ej. 10</b> (aeropuerto). Para cada componente (vehículo, AP, datacenter, servidores en Internet):
+<ol>
+  <li>¿En qué capa va (dispositivo / edge / fog / cloud)?</li>
+  <li>¿Qué <b>latencia</b> tolera su función?</li>
+  <li>¿Qué <b>parte del sistema</b> necesita ver (un auto, la zona de un AP, todo el predio, varios aeropuertos)?</li>
+  <li>¿Qué <b>procesamiento y datos</b> tiene? ¿Tiempo real o histórico?</li>
+  <li>¿Qué <b>interfaz</b> ofrece y con qué conector (pub/sub de posiciones, request-reply, streams)?</li>
+</ol>
+Y decir cómo se comunican los autos entre sí: directo, o vía el edge que ve la zona.</div>
+
+<h2>8 · Cómputo distribuido: límites (teórica 15)</h2>
+<ul>
+  <li><b>Definiciones</b>:
+    <ul>
+      <li>Lamport: "aquel en el que la falla de una computadora que ni sabías que existía puede dejar inutilizable la tuya".</li>
+      <li>Tanenbaum: "colección de computadoras independientes que se presenta como un único sistema coherente".</li>
+    </ul></li>
+  <li><b>Tres rasgos</b> (Coulouris): <b>concurrencia</b>, <b>sin reloj global</b> y <b>fallas independientes</b>. La comunicación es <b>solo por mensajes</b>: lo que un nodo sabe de otro es lo que le llegó, y puede estar desactualizado.</li>
+  <li><b>Por qué distribuir</b>: escalar, tolerar fallas, localidad y costo. Escalar vertical tiene techo; escalar horizontal no, pero exige coordinar.</li>
+  <li><b>Amdahl</b>: <span class="f">S(n) = 1 / ((1−p) + p/n)</span>. Con n → ∞, S → 1/(1−p). Con p = 0,95, por más máquinas que agregues, la aceleración máxima es 20× (S(1024) ≈ 19,6). Gustafson: si el problema crece con n, el panorama mejora.</li>
+  <li><b>Modelos de sistema</b>:
+    <ul>
+      <li>Tiempo: síncrono / parcialmente síncrono / asíncrono.</li>
+      <li>Fallas: crash / crash-recovery / bizantina.</li>
+      <li>Canales: confiables / con pérdidas equitativas / arbitrarios.</li>
+    </ul>
+    Todo algoritmo es correcto <b>respecto de un modelo</b>.</li>
+  <li><b>8 falacias</b> (Deutsch): la red es confiable · la latencia es cero · el ancho de banda es infinito · la red es segura · la topología no cambia · hay un solo administrador · el transporte cuesta cero · la red es homogénea.</li>
+  <li><b>Imposibilidad</b>:
+    <ul>
+      <li><b>Dos Generales</b>: con un canal con pérdidas no hay acuerdo garantizado, porque siempre falta el último ACK.</li>
+      <li><b>FLP</b>: en un sistema asíncrono no hay consenso determinista que siempre termine si puede caer un proceso.</li>
+      <li><b>CAP</b>: ante una <b>partición</b> hay que elegir entre <b>C</b>onsistencia (linealizable) y <b>A</b>vailability.</li>
+      <li><b>PACELC</b>: si hay Partición, A o C; si no (Else), igual se elige entre <b>L</b>atencia y <b>C</b>onsistencia.</li>
+    </ul></li>
+  <li><b>Replicación</b>:
+    <ul>
+      <li><b>Máquina de estados replicada</b>: mismos comandos en el mismo orden dan el mismo estado, así que todo se reduce a acordar el orden del log (consenso).</li>
+      <li>Réplicas necesarias: crash <span class="f">n ≥ 2f+1</span> (Paxos, Raft); bizantina <span class="f">n ≥ 3f+1</span> (PBFT).</li>
+      <li><b>Quórums</b>: <span class="f">R + W &gt; N</span>, así que toda lectura ve la última escritura (N=3, W=2, R=2 tolera una caída).</li>
+    </ul></li>
+  <li><b>Consistencia</b>, de más fuerte a más débil:
+    <ul>
+      <li><b>Linealizable</b>: cada operación parece instantánea (Spanner, etcd).</li>
+      <li><b>Secuencial</b>: un orden total común.</li>
+      <li><b>Causal</b>: si a pudo influir en b, todos ven a antes que b (chats, redes sociales).</li>
+      <li><b>Eventual</b>: si cesan las escrituras, las réplicas convergen (<b>DNS</b>, Dynamo, CRDTs).</li>
+    </ul>
+    Cuanto más débil, menos coordinación y latencia y más disponibilidad, pero más trabajo para el programador.</li>
+  <li><b>La nube como sistema distribuido</b>:
+    <ul>
+      <li>Las fallas son la norma: 10.000 servidores con MTBF de 30 años dan ≈ 0,9 fallas por día.</li>
+      <li><b>Latencia de cola</b>: con fan-out a 100 servidores lentos el 1% de las veces, el 63% de los pedidos son lentos (1 − 0,99<sup>100</sup>).</li>
+      <li>MapReduce lleva el cómputo a los datos.</li>
+    </ul></li>
+  <li><b>Péndulo</b> centralizar / distribuir: mainframe → cliente-servidor → clusters/grid → nube pública (2006) → edge/fog → continuo. Lo mueve la relación entre el costo de computar, el costo de comunicar y la latencia tolerable.</li>
+</ul>
+
+<h2>9 · Relojes: Lamport, vectoriales, TrueTime</h2>
+<h3>Lamport (1978): ordenar sin reloj común</h3>
+<ul>
+  <li><b>"Ocurrió antes" (a → b)</b> se da en tres casos: a y b están en el mismo proceso y a va primero; a es el envío y b la recepción del mismo mensaje; o por transitividad.</li>
+  <li>Un contador entero C por proceso, con tres reglas:
+    <ol>
+      <li>Antes de cada evento local o envío: <span class="f">C := C + 1</span>.</li>
+      <li>Al enviar, el mensaje lleva <span class="f">t = C</span>.</li>
+      <li>Al recibir con marca t: <span class="f">C := max(C, t) + 1</span>.</li>
+    </ol></li>
+  <li>El <b>max</b> asegura que la recepción quede después del envío aunque el receptor viniera atrasado.</li>
+  <li><b>Garantía</b>: <span class="f">a → b ⇒ C(a) &lt; C(b)</span>. <b>La recíproca no vale</b>: C(c) = 1 &lt; C(b) = 2 y sin embargo c y b son <b>concurrentes</b> (ninguno pudo influir en el otro).</li>
+  <li><b>Orden total</b>: desempatar por id de proceso, usando el par (C, p).</li>
+</ul>
+<pre>Ejemplo de clase:  p1: a(1) [envía m1 a p2] → b(2) [envía m2 a p3]
+                   p2: c(1) → d(2) → e [recibe m1]
+                   p3: f [recibe m2]
+e recibe m1 (t=1) con C=2:  max(2,1)+1 = 3   (gana el reloj local)
+f recibe m2 (t=2) con C=0:  max(0,2)+1 = 3   (gana la marca del mensaje)</pre>
+<h3>Relojes vectoriales (Fidge, Mattern, 1988)</h3>
+<ul>
+  <li>Cada proceso lleva un vector con un contador por proceso. Al recibir, toma el <b>máximo componente a componente</b> y suma 1 en la propia.</li>
+  <li><span class="f">V(a) &lt; V(b)</span> (todas las componentes ≤ y alguna &lt;) si y solo si a → b. Si no son comparables, son <b>concurrentes</b>. Por ejemplo, c = (0,1,0) y b = (2,0,0).</li>
+  <li><b>Sí</b> caracterizan la causalidad, a diferencia de Lamport. El costo es mandar n enteros por mensaje.</li>
+</ul>
+<table>
+<tr><th>Evento</th><th>a</th><th>b</th><th>c</th><th>d</th><th>e</th><th>f</th></tr>
+<tr><td>Lamport</td><td>1</td><td>2</td><td>1</td><td>2</td><td>3</td><td>3</td></tr>
+<tr><td>Vectorial</td><td>(1,0,0)</td><td>(2,0,0)</td><td>(0,1,0)</td><td>(0,2,0)</td><td>(1,3,0)</td><td>(2,0,1)</td></tr>
+</table>
+<h3>Relojes físicos y TrueTime (Spanner, Google, 2012)</h3>
+<ul>
+  <li>Los relojes físicos <b>derivan</b>: un cristal de 20 ppm se desvía unos 1,7 s por día. <b>NTP</b> los acerca a milisegundos en Internet y <b>PTP</b> a microsegundos en una LAN, nunca a cero.</li>
+  <li><b>TrueTime</b>: el reloj <b>admite que no sabe</b> la hora exacta y devuelve un <b>intervalo</b>:
+    <ul>
+      <li><span class="f">TT.now() = [earliest, latest]</span>, de ancho 2ε, que garantiza contener la hora real.</li>
+      <li><span class="f">TT.after(t)</span> es verdadero si t ya pasó con seguridad (t &lt; earliest).</li>
+      <li><span class="f">TT.before(t)</span> es verdadero si t todavía no llegó (t &gt; latest).</li>
+    </ul></li>
+  <li>Se sincroniza cada 30 s contra time masters con <b>GPS y relojes atómicos</b>. ε arranca en ~1 ms y crece con la deriva supuesta (200 µs/s, diez veces peor que lo real, por seguridad): <span class="f">ε = 1 ms + 0,2 ms/s × Δt</span>, del orden de 1 a 7 ms.</li>
+  <li><b>Commit wait</b>:
+    <ol>
+      <li>Al hacer commit se elige el timestamp <span class="f">s = TT.now().latest</span>.</li>
+      <li>No se liberan los locks ni se responde hasta que <span class="f">TT.after(s)</span> sea verdadero, lo que lleva unos <b>2ε</b>.</li>
+      <li>Así, s ya pasó en tiempo real para cualquier observador.</li>
+    </ol></li>
+  <li><b>Consistencia externa</b>: si T2 empieza después de que T1 terminó en tiempo real, aunque sea en otro nodo del mundo y solo los conecte un cliente externo, entonces <span class="f">s₁ &lt; s₂</span>. <b>La incertidumbre del reloj se paga en latencia</b> (unos ms por commit, en parte superpuestos con la ronda de Paxos).</li>
+  <li><b>Lamport vs TrueTime</b>: Lamport ordena de forma compatible con la causalidad que <b>viaja en mensajes</b>. TrueTime ordena también eventos <b>sin mensajes entre sí</b>, porque ancla los timestamps a la hora real.</li>
+</ul>
+
+<h2>10 · Mapa de la guía</h2>
+<table>
+<tr><th>Ej.</th><th>Tema</th><th>Mirá</th></tr>
+<tr><td>1</td><td>Diseñar 3 escenarios: componentes, conectores, protocolos, niveles (docs compartidos, buscador, transferencia entre apps)</td><td>§0 receta, §1 (1b resuelto), §3</td></tr>
+<tr><td>2</td><td>E-book: interfaces, niveles y acoplamientos</td><td>§3 (resuelto)</td></tr>
+<tr><td>3</td><td>Simulaciones con pub/sub; event-based vs shared space; notificaciones</td><td>§3 (resuelto)</td></tr>
+<tr><td>4</td><td>Edificio inteligente: sensores, luces, suscripciones atributo-valor / atributo-rango</td><td>§3 topic vs content-based</td></tr>
+<tr><td>5</td><td>Wrappers vs broker</td><td>§4 (5b y 5c resueltos)</td></tr>
+<tr><td>6</td><td>Transferencias sobre UDP: se pierde el OK</td><td>§5 idempotencia (resuelto)</td></tr>
+<tr><td>7</td><td>Validaciones en el cliente o el servidor; multi-tier</td><td>§5 (7.1 resuelto)</td></tr>
+<tr><td>8</td><td>Sensores WiFi + Bluetooth: overlay, recolección, flooding/RW vs anillo</td><td>§6</td></tr>
+<tr><td>9</td><td>tar.gz de 1 TB: flooding, random walk, super peer</td><td>§6 (resuelto con la versión de 1 Gbps)</td></tr>
+<tr><td>10</td><td>Aeropuerto con vehículos autónomos: cloud / fog / edge</td><td>§7 plantilla</td></tr>
+<tr><td>—</td><td>Teórica sin guía: Lamport, vectoriales, TrueTime, CAP, quórums</td><td>§8, §9</td></tr>
+</table>
+
+</body>
+</html>
