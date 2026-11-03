@@ -134,8 +134,61 @@ Cliente                                                      Servidor
 
 ## Ej 5 — Autenticidad con un servicio (SSH / TLS)
 ### a) Autenticar clientes con SSH
+Quien se autentica es **cada cliente**, y quien verifica es el **servidor**.
+
+**Cuántas y dónde.** Con $N$ clientes $C_1 \dots C_N$:
+- Cada cliente $C_i$ genera **su propio par** $(K_{C_i}^+, K_{C_i}^-)$. Son **$N$ pares** en total.
+- Cada **privada** $K_{C_i}^-$ queda **solo en el equipo de $C_i$** y nunca sale de ahí.
+- Las **$N$ públicas** $K_{C_i}^+$ se instalan **en el servidor**, cada una asociada a su usuario (en SSH, `~/.ssh/authorized_keys`). Tienen que cargarse por un **canal confiable**, por ejemplo copiadas por un administrador; si no, un atacante podría colar su propia pública (MITM, ej. 3).
+- El servidor **no necesita una privada propia** para esto: solo verifica.
+
+**Challenge-response.**
+1. $C_i$ se conecta y dice quién es.
+2. El servidor busca $K_{C_i}^+$ y le manda un **challenge** $R$: un número aleatorio grande y nuevo en cada intento, para que una respuesta grabada no sirva (anti-replay).
+3. $C_i$ responde **firmándolo** con su privada: $E_{K_{C_i}^-}(R)$.
+4. El servidor verifica que $D_{K_{C_i}^+}(E_{K_{C_i}^-}(R)) = R$. Como solo $C_i$ tiene $K_{C_i}^-$, queda autenticado.
+
+Una variante equivalente es que el servidor mande $E_{K_{C_i}^+}(R)$ y $C_i$ devuelva $R$ descifrado con su privada. Así lo hacía SSHv1. En los dos casos se prueba la **posesión de la privada**.
+
 ### b) Autenticar el servidor
+
+Es lo mismo que en a), pero al revés: ahora el que se autentica es el **servidor** y los que verifican son los **clientes**.
+
+**Cuántas y dónde.**
+- El servidor genera **un solo par** $(K_S^+, K_S^-)$.
+- La **privada** $K_S^-$ vive **solo en el servidor**.
+- La **pública** $K_S^+$ se instala **en cada uno de los $N$ clientes** (en SSH, `~/.ssh/known_hosts`).
+
+Es el espejo de a): allá eran $N$ públicas en un servidor; acá es una pública copiada en $N$ clientes.
+
+**Challenge-response.** El cliente manda un $R$ aleatorio, el servidor responde $E_{K_S^-}(R)$ y el cliente verifica que $D_{K_S^+}(\cdot) = R$. Si coincide, es el servidor verdadero: solo él tiene $K_S^-$.
+
+**Cómo llega $K_S^+$ al cliente.** En SSH, la primera vez que te conectás a un host nuevo el cliente muestra el **fingerprint**, que es el hash de $K_S^+$, y pregunta si confiás. Si aceptás, la guarda en `known_hosts`, y en las conexiones siguientes la compara: si cambia, avisa.
+
+Esa primera conexión es el punto débil. Si en ese momento hay un MITM, te guardás la clave del atacante. Para evitarlo, $K_S^+$ se preinstala por un canal confiable (por ejemplo, la carga un administrador) o se verifica el fingerprint por otro medio.
+
 ### c) Con certificado firmado por una CA
+La autenticación pasa a hacerse con el **handshake SSL/TLS** del ej. 4b. Para autenticar también a los clientes se usa **TLS mutuo**: CertificateRequest → Certificate → CertificateVerify.
+
+**Qué se instala en cada máquina**
+
+| Dónde | Qué | Para qué |
+|---|---|---|
+| Todas (servidor y clientes) | Certificado de la CA, con $K_{CA}^+$ | Raíz de confianza: verificar cualquier certificado firmado por la CA |
+| Servidor | Su par $(K_S^+, K_S^-)$ y $Cert_S = (S;\ K_S^+;\ E_{K_{CA}^-}(H(S + K_S^+)))$ | Presentarse en el handshake |
+| Cada cliente $C_i$ | Su par $(K_{C_i}^+, K_{C_i}^-)$ y $Cert_{C_i} = (C_i;\ K_{C_i}^+;\ E_{K_{CA}^-}(H(C_i + K_{C_i}^+)))$ | Presentarse cuando el servidor lo pide |
+
+Cada uno guarda **solo su propio certificado y su privada**. El certificado del otro **no se guarda de antemano**: llega en el handshake, y se verifica con $K_{CA}^+$ (firma, vigencia / no revocado, y que el nombre coincida).
+
+**Cómo cambian a) y b)**
+- **a) Autenticar clientes.** El servidor deja de guardar $N$ públicas sueltas y guarda **solo $K_{CA}^+$**.
+  - Para verificar al cliente: el cliente manda $Cert_{C_i}$, el servidor lo valida con $K_{CA}^+$, y después comprueba con $K_{C_i}^+$ la firma del **CertificateVerify** $E_{K_{C_i}^-}(H(\text{handshake}))$. Esa firma es la que prueba que el cliente tiene la privada: mandar el certificado solo no prueba nada, porque es público.
+  - Altas y bajas sin tocar el servidor: un usuario nuevo solo necesita que la CA le firme el certificado, y para dar de baja a uno se revoca su certificado (CRL / OCSP).
+- **b) Autenticar el servidor.** Los clientes dejan de guardar $K_S^+$ en `known_hosts` y guardan **solo $K_{CA}^+$**.
+  - Para verificar al servidor: el servidor manda $Cert_S$, el cliente lo valida, y le manda la pre-master cifrada con $K_S^+$. Solo el servidor verdadero puede descifrarla y terminar el handshake (`Finished`).
+  - Desaparece el punto débil de la **primera conexión**: no hay que confiar a ciegas en un fingerprint, porque el certificado viene firmado por la CA.
+
+En resumen, cada parte pasa de guardar una pública por cada entidad en la que confía a guardar **una sola, la de la CA**. Confía en la CA y, por transitividad, en todo lo que la CA firma.
 
 ## Ej 6 — Proxy HTTPS: autenticar usuarios
 
