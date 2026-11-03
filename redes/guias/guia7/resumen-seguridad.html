@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Resumen Seguridad</title>
+<style>
+  @page { size: A4; margin: 14mm 14mm; }
+  :root { --ink:#1b1b1b; --muted:#555; --accent:#1f6fb2; --warn:#b3261e; --box:#f3f6fa; --line:#d6dde6; }
+  body { font-family: "Segoe UI", Arial, sans-serif; font-size: 10.5pt; line-height: 1.38; color: var(--ink); background:#fff; margin:0; }
+  h1 { font-size: 18pt; margin: 0 0 2px; }
+  .sub { color: var(--muted); margin: 0 0 12px; }
+  h2 { font-size: 13pt; color: var(--accent); border-bottom: 2px solid var(--accent); padding-bottom: 2px; margin: 18px 0 8px; break-after: avoid; }
+  h3 { font-size: 11pt; margin: 12px 0 4px; break-after: avoid; }
+  p { margin: 4px 0 6px; }
+  ul, ol { margin: 4px 0 6px; padding-left: 18px; }
+  li { margin: 2px 0; }
+  code, .f, pre { font-family: Consolas, "Courier New", monospace; font-size: 9.4pt; }
+  pre { background:#f6f6f6; border:1px solid var(--line); padding:6px 8px; margin:6px 0; white-space: pre-wrap; break-inside: avoid; }
+  .box { background: var(--box); border-left: 4px solid var(--accent); padding: 6px 10px; margin: 8px 0; break-inside: avoid; }
+  .warn { background: #fdf1f0; border-left: 4px solid var(--warn); padding: 6px 10px; margin: 8px 0; break-inside: avoid; }
+  table { border-collapse: collapse; width: 100%; margin: 6px 0 8px; break-inside: avoid; }
+  th, td { border: 1px solid var(--line); padding: 3px 6px; text-align: left; vertical-align: top; }
+  th { background: #e8eef5; }
+  .ok { color:#1b7a2f; font-weight:700; } .no { color: var(--warn); font-weight:700; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+</style>
+</head>
+<body>
+
+<h1>Seguridad — Guía 7</h1>
+<p class="sub">RCCD 2C 2026 · Resumen de la teórica 14 (Seguridad + Blockchain), la práctica de seguridad (13/10) y la práctica de los ej. 6 y 9. Notación de la guía: <span class="f">E<sub>Q</sub>(M)</span> cifra, <span class="f">D<sub>Q</sub>(C)</span> descifra, <span class="f">H(M)</span> hash, <span class="f">K</span> simétrica, <span class="f">K<sup>+</sup><sub>A</sub></span> pública de A, <span class="f">K<sup>−</sup><sub>A</sub></span> privada de A.</p>
+
+<h2>0 · La idea en criollo</h2>
+<ul>
+  <li><b>Simétrica</b> = un <b>candado con una sola llave</b> y una copia para cada uno. Es rápida, pero ¿cómo le hacés llegar la copia al otro sin que nadie la vea?</li>
+  <li><b>Asimétrica</b> = un <b>buzón</b>: cualquiera puede meter una carta (clave <b>pública</b>), pero solo el dueño la abre (clave <b>privada</b>). Y al revés: lo que el dueño "sella" con su privada, cualquiera lo puede comprobar con la pública. Eso es una <b>firma</b>.</li>
+  <li><b>Hash</b> = la <b>huella digital</b> del mensaje: chiquita, fija, y si cambiás una letra cambia toda.</li>
+  <li><b>Certificado</b> = el <b>DNI de una clave pública</b>: un tercero en quien todos confían (la CA) firma "esta clave es de fulano".</li>
+  <li><b>TLS</b> = usar lo asimétrico (lento) solo para <b>presentarse y acordar</b> una clave simétrica, y después hablar con lo simétrico (rápido).</li>
+</ul>
+<div class="box"><b>La pregunta de todos los ejercicios:</b> ¿<b>quién</b> tiene que probar <b>qué</b>, y con <b>qué clave</b>?
+<ol>
+  <li><b>¿Qué piden?</b> Subrayá las propiedades: confidencialidad, integridad, autenticación, no repudio.</li>
+  <li><b>¿Quién demuestra y quién verifica?</b> Fijate "del lado de quién" pide el enunciado.</li>
+  <li><b>¿Con qué clave?</b> El que demuestra usa <b>su privada</b>. El que verifica necesita <b>la pública</b> del otro y tiene que <b>confiar</b> en ella (certificado o carga previa por canal seguro).</li>
+</ol></div>
+
+<h2>1 · Propiedades (marco de trabajo)</h2>
+<table>
+<tr><th>Propiedad</th><th>Qué significa</th><th>Con qué se logra</th></tr>
+<tr><td><b>Confidencialidad</b></td><td>Solo las partes autorizadas entienden el mensaje.</td><td>Cifrar: simétrica con K, o <span class="f">E<sub>K<sup>+</sup>B</sub></span> (pública del <b>receptor</b>).</td></tr>
+<tr><td><b>Integridad</b></td><td>Si lo modifican (o lo reemplazan, repiten o demoran), se detecta.</td><td>Hash <b>protegido con una clave</b>: MAC o firma. Un hash solo no alcanza, porque el atacante lo recalcula.</td></tr>
+<tr><td><b>Autenticación</b></td><td>Sé quién lo mandó. Nadie se hace pasar por otro.</td><td>Firma, MAC, challenge-response, certificados.</td></tr>
+<tr><td><b>No repudio</b></td><td>Puedo <b>probarle a un tercero</b> quién lo mandó. El emisor no puede negarlo.</td><td><b>Firma digital</b> con la privada del emisor (y certificado que la ate a su identidad).</td></tr>
+<tr><td>Autorización</td><td>Solo ciertos usuarios hacen ciertas acciones.</td><td>Control de acceso, después de autenticar.</td></tr>
+<tr><td>Disponibilidad</td><td>El servicio atiende (contra DoS).</td><td><b>No</b> se logra con criptografía.</td></tr>
+<tr><td>Originalidad / Temporalidad</td><td>No es una copia repetida / no fue demorado.</td><td>Nonce / timestamp <b>dentro de lo firmado</b>.</td></tr>
+</table>
+<ul>
+  <li><b>No repudio ⇒ autenticación</b>, pero no al revés. Un MAC autentica, pero <b>no</b> da no repudio, porque los dos tienen la misma clave.</li>
+  <li>El no repudio es en el fondo un concepto <b>legal</b>: la tecnología aporta la evidencia (la firma guardada).</li>
+  <li>Ante cada tecnología, preguntate qué subconjunto de propiedades provee.</li>
+</ul>
+
+<h2>2 · Criptografía clásica (ej. 1)</h2>
+<ul>
+  <li><b>Cifrado</b> = transforma carácter a carácter o bit a bit, sin mirar el idioma. <b>Código</b> = reemplaza palabras enteras (por ejemplo, los navajos en la Segunda Guerra).</li>
+  <li><b>Sustitución</b>: cada letra se reemplaza por otra y se mantiene el orden.
+    <ul>
+      <li><b>César</b>: rotar el alfabeto k lugares, así que hay solo 25 claves.</li>
+      <li><b>Monoalfabética</b>: cualquier permutación, 26! ≈ 4·10<sup>26</sup> claves. Aun así se rompe por <b>análisis de frecuencias</b>, porque cada letra del texto plano siempre se mapea a la misma letra cifrada.</li>
+      <li><b>Polialfabética</b>: un alfabeto distinto por posición, lo que aplana las frecuencias.</li>
+    </ul></li>
+  <li><b>Transposición</b>: se reordenan las letras sin enmascararlas (columnas numeradas por una clave tipo MEGABUCK). Las frecuencias quedan iguales a las del idioma.</li>
+  <li>Estrategias para romper un César:
+    <ol>
+      <li><b>Fuerza bruta</b>: probar los 25 desplazamientos y quedarse con el que da texto legible.</li>
+      <li><b>Frecuencias</b>: la letra más frecuente del criptograma probablemente sea la "e" (en inglés y en castellano). El desplazamiento es la distancia entre ambas.</li>
+      <li><b>Palabras cortas y patrones</b>: las palabras de 1 a 3 letras repetidas (a, the, and, of / de, la, el), los dobles (ll, ss) y la firma al final.</li>
+    </ol></li>
+  <li><b>Principio de Kerckhoffs</b>: el algoritmo es <b>público</b> y solo la <b>clave</b> es secreta. La "seguridad por oscuridad" no funciona.</li>
+  <li><b>Factor de trabajo</b>: crece <b>exponencialmente</b> con el largo de la clave. Hoy 128/256 bits es uso comercial y ≥ 256 bits es para defensa.</li>
+  <li><b>One-time pad</b>: clave aleatoria tan larga como el mensaje, combinada con XOR y usada una sola vez. Es <b>inviolable</b> (Shannon), pero <b>impráctica</b> por la distribución de la clave.</li>
+</ul>
+
+<h2>3 · Simétrica</h2>
+<ul>
+  <li>Una <b>única clave K</b> compartida: <span class="f">C = E<sub>K</sub>(M)</span>, <span class="f">M = D<sub>K</sub>(C)</span>. Da <b>confidencialidad</b>.</li>
+  <li><b>DES</b> (IBM 1977): bloques de 64 bits, 16 rondas con subclaves derivadas de una misma clave. Hoy está obsoleto (clave corta).
+    <ul>
+      <li><b>3DES</b>: <span class="f">C = E<sub>K3</sub>(D<sub>K2</sub>(E<sub>K1</sub>(M)))</span>.</li>
+      <li><b>AES</b> (128/192/256) es lo mínimo hoy.</li>
+    </ul></li>
+  <li>Cifrado de bloque iterativo = rondas de <b>sustitución + permutación</b> sobre bloques de n bits.</li>
+  <li>Problemas:
+    <ul>
+      <li>La <b>distribución de la clave</b> es el punto débil histórico.</li>
+      <li>Sola, <b>no da integridad</b>: el atacante puede alterar bits del criptograma.</li>
+      <li>Tampoco da <b>autenticación individual</b>, porque los dos tienen K.</li>
+    </ul></li>
+  <li><b>KDC</b> (Key Distribution Center): cada uno comparte una clave con el KDC.
+    <ul>
+      <li>A elige una clave de sesión <span class="f">K<sub>S</sub></span> y manda <span class="f">A, K<sub>A</sub>(B, K<sub>S</sub>)</span>.</li>
+      <li>El KDC le reenvía a B <span class="f">K<sub>B</sub>(A, K<sub>S</sub>)</span>.</li>
+    </ul></li>
+</ul>
+
+<h2>4 · Asimétrica (clave pública)</h2>
+<ul>
+  <li>Cada uno tiene un par: <span class="f">K<sup>+</sup></span> (pública, se reparte) y <span class="f">K<sup>−</sup></span> (privada, nunca sale de su máquina). No se puede derivar la privada a partir de la pública.</li>
+  <li>Historia: Diffie-Hellman (1976) y RSA (1978). El acuerdo de clave Diffie-Hellman permite que dos partes acuerden un secreto por un canal público.</li>
+  <li><b>Propiedad clave de RSA</b>: <span class="f">K<sup>−</sup>(K<sup>+</sup>(m)) = m = K<sup>+</sup>(K<sup>−</sup>(m))</span>. Sirve en los dos sentidos.</li>
+  <li>RSA, generación de claves:
+    <ol>
+      <li>Elegir primos grandes p, q.</li>
+      <li>Calcular <span class="f">n = p·q</span> y <span class="f">z = (p−1)(q−1)</span>.</li>
+      <li>Elegir e coprimo con z.</li>
+      <li>Calcular d tal que <span class="f">e·d mod z = 1</span>.</li>
+      <li>La pública es <span class="f">(n, e)</span> y la privada <span class="f">(n, d)</span>.</li>
+    </ol></li>
+  <li>RSA, uso: <span class="f">c = m<sup>e</sup> mod n</span> y <span class="f">m = c<sup>d</sup> mod n</span>. Ejemplo de juguete: p=3, q=11 → n=33, e=3, d=7. La seguridad viene de que factorizar n es caro.</li>
+  <li>Desventajas:
+    <ul>
+      <li>Es <b>mucho más lenta</b> que la simétrica, así que se usa sobre datos chicos (hashes, claves).</li>
+      <li>El problema pasa a ser si la <span class="f">K<sup>+</sup></span> que tengo es realmente de quien dice. Eso lleva a §6.</li>
+    </ul></li>
+</ul>
+<div class="two">
+<div class="box"><b>Para que solo B lo lea</b><br>uso algo de B que todos tienen, su <b>pública</b>:<br><span class="f">C = E<sub>K<sup>+</sup>B</sub>(M)</span> → <b>confidencialidad</b></div>
+<div class="box"><b>Para probar que fui yo (A)</b><br>uso algo mío que solo yo tengo, mi <b>privada</b>:<br><span class="f">F = E<sub>K<sup>−</sup>A</sub>(H(M))</span> → <b>autenticación + integridad + no repudio</b></div>
+</div>
+<div class="warn"><b>Error típico:</b> "cifro con la privada para que sea confidencial". <b>No</b>: lo que cifrás con tu privada lo descifra cualquiera con tu pública. Eso es firmar, no ocultar.</div>
+<p><b>Híbrido</b> (lo que se usa en la práctica): la asimétrica sirve para autenticar y para mandar o acordar una clave de sesión simétrica, y los datos van cifrados con esa simétrica (AES). Así funciona TLS, y también PGP para mail.</p>
+
+<h2>5 · Hash, MAC y firma digital</h2>
+<h3>Función de hash criptográfica</h3>
+<ul>
+  <li>Toma una entrada de cualquier tamaño y da una salida de <b>tamaño fijo</b>. Es fácil de calcular y tiene <b>efecto avalancha</b> (una letra distinta cambia todo el resultado).</li>
+  <li>Tres propiedades:
+    <ul>
+      <li><b>Preimagen</b> (no inversible): dado y, es inviable hallar x con H(x)=y.</li>
+      <li><b>Segunda preimagen</b>: dado x, es inviable hallar otro x′ con el mismo hash.</li>
+      <li><b>Colisiones</b>: es inviable hallar cualquier par x≠x′ con el mismo hash.</li>
+    </ul></li>
+  <li>Algoritmos: <b>MD5</b> (128 bits) y <b>SHA-1</b> (160 bits) tienen colisiones encontradas, así que están rotos. Hoy se usa <b>SHA-2</b> (SHA-256/512) o SHA-3.</li>
+  <li>Un hash <b>solo no protege</b>: el atacante cambia M y recalcula H(M). Hay que atarlo a una clave.</li>
+</ul>
+<h3>MAC (hash con clave compartida)</h3>
+<ul>
+  <li><span class="f">mac = HMAC<sub>K</sub>(M)</span>. El receptor recalcula el MAC y compara.</li>
+  <li>Da <b>integridad + autenticación</b>, porque sin K no se puede fabricar un MAC válido.</li>
+  <li><b>No da no repudio</b>: el receptor también tiene K, así que el emisor puede decir "eso lo fabricaste vos".</li>
+</ul>
+<h3>Firma digital</h3>
+<pre>A firma:     F = E_{K-A}( H(M) )            → manda  M + F
+B verifica:  D_{K+A}(F)  ==  H(M) ?          sí → íntegro y de A</pre>
+<ul>
+  <li>Se firma el <b>hash</b> y no el mensaje porque la asimétrica es cara sobre datos largos, y el hash es corto y de tamaño fijo.</li>
+  <li>Da <b>integridad, autenticación y no repudio</b>. <b>No da confidencialidad</b>: M viaja en claro.</li>
+  <li>Ejemplo: RSA + SHA-256 (antes RSA + SHA-1). En blockchain se usa ECDSA/Schnorr.</li>
+</ul>
+<h3>Firma + confidencialidad (esquema del ej. 2)</h3>
+<pre>Emisor A:
+  1. D = H(M)                                      (hash, no lleva clave)
+  2. F = E_{K-A}(D)                                (firma con la PRIVADA de A)
+  3. C = E_{K+B}(M + F)                            (cifra con la PÚBLICA de B)
+     (en la práctica, híbrido: C = E_K(M+F) junto con E_{K+B}(K))
+Receptor B:
+  1. M + F = D_{K-B}(C)                            → solo B puede → confidencialidad
+  2. D_{K+A}(F) == H(M) ?                          → no repudio + integridad</pre>
+
+<h2>6 · El problema de la clave pública: MITM y certificados (ej. 3)</h2>
+<h3>Ataque man-in-the-middle en el intercambio de claves</h3>
+<ol>
+  <li>B publica su <span class="f">K<sup>+</sup><sub>B</sub></span>. X la intercepta y le entrega a A <b>su propia</b> <span class="f">K<sup>+</sup><sub>X</sub></span>. Hace lo mismo en la otra dirección.</li>
+  <li>A cifra <span class="f">E<sub>K<sup>+</sup>X</sub>(M)</span> creyendo que es para B.</li>
+  <li>X descifra, lee o <b>modifica</b> M, lo vuelve a cifrar con <span class="f">K<sup>+</sup><sub>B</sub></span> y se lo pasa a B. Nadie nota nada.</li>
+</ol>
+<p>Solución: un <b>tercero en quien todos confían</b> firma el vínculo <b>identidad ↔ clave pública</b>. Eso es un certificado.</p>
+<h3>Certificado digital (X.509v3)</h3>
+<pre>Cert_U = ( U ; K+_U ; F )     con   F = E_{K-CA}( H(U + K+_U) )</pre>
+<ul>
+  <li>Contiene:
+    <ul>
+      <li><b>Sujeto</b> (quién es U) y <b>su clave pública</b>.</li>
+      <li><b>Emisor</b> (qué CA lo firmó).</li>
+      <li><b>Validez</b> (desde/hasta) y <b>número de serie</b>.</li>
+      <li>Algoritmos, y la <b>firma de la CA</b>.</li>
+    </ul></li>
+  <li>Para verificarlo:
+    <ol>
+      <li>Comprobar que <span class="f">D<sub>K<sup>+</sup>CA</sub>(F) == H(U + K<sup>+</sup><sub>U</sub>)</span>.</li>
+      <li>Comprobar que está vigente y que no fue revocado (<b>CRL / OCSP</b>).</li>
+      <li>Tener la <span class="f">K<sup>+</sup><sub>CA</sub></span>, que ya <b>estaba instalada</b> (es la <b>raíz de confianza</b>: navegador o sistema operativo, o la CA propia de la organización instalada a mano).</li>
+    </ol></li>
+  <li><b>PKI</b> = el esquema jerárquico y centralizado: CA raíz → CAs intermedias → certificado. Se verifica <b>la cadena</b> hasta una raíz confiable.</li>
+  <li><b>Web of Trust</b> (PGP) = esquema descentralizado: los usuarios se firman las claves entre sí ("fiestas de firmado").</li>
+</ul>
+<div class="warn"><b>La idea más importante:</b> mandar el certificado <b>no prueba nada</b>. Es público y cualquiera lo copia. Lo que prueba la identidad es <b>firmar algo nuevo con la privada</b> (un challenge, o el resumen del handshake).</div>
+
+<h2>7 · Autenticación: challenge-response y replay (ej. 5)</h2>
+<h3>Con clave compartida K<sub>AB</sub> (autenticación de dos vías)</h3>
+<pre>1. A → B : A                      (identidad)
+2. B → A : R_B                    (challenge aleatorio grande, en claro)
+3. A → B : K_AB(R_B)              → B sabe que es A
+4. A → B : R_A
+5. B → A : K_AB(R_A)              → A sabe que es B   (después A puede mandar K_AB(K_S))</pre>
+<ul>
+  <li><b>Versión simplificada en 3 mensajes</b> (<span class="f">A,R_A</span> / <span class="f">R_B, K_AB(R_A)</span> / <span class="f">K_AB(R_B)</span>): es vulnerable al <b>ataque por reflexión</b> si se permiten sesiones paralelas.
+    <ol>
+      <li>T, haciéndose pasar por A, abre la sesión 1.</li>
+      <li>Cuando B le manda su challenge R<sub>B</sub>, T abre una sesión 2 y le manda <b>ese mismo R<sub>B</sub></b> como challenge propio.</li>
+      <li>B responde K<sub>AB</sub>(R<sub>B</sub>) en la sesión 2. T usa esa respuesta en la sesión 1 y queda autenticado como A.</li>
+    </ol></li>
+  <li>Reglas de diseño:
+    <ul>
+      <li>El que inicia se identifica primero.</li>
+      <li>Usar claves distintas por sentido (K<sub>AB</sub> y K′<sub>AB</sub>).</li>
+      <li>Sacar los challenges de conjuntos distintos (por ejemplo, uno pares y el otro impares).</li>
+      <li>Que el protocolo resista sesiones paralelas.</li>
+    </ul></li>
+</ul>
+<h3>Con clave pública (como SSH)</h3>
+<ul>
+  <li>El servidor manda un challenge R. El cliente responde <span class="f">E<sub>K<sup>−</sup>C</sub>(R)</span>, firmando con su privada. El servidor lo verifica con la <span class="f">K<sup>+</sup><sub>C</sub></span> que tiene <b>cargada de antemano</b>.</li>
+</ul>
+<h3>Replay (ataque de repetición)</h3>
+<p>El atacante no rompe nada: <b>graba un mensaje válido y lo reenvía</b>. La firma sigue siendo correcta. Defensas:</p>
+<ul>
+  <li><b>Nonce</b>: valor aleatorio de un solo uso. O lo elige el que verifica (challenge), o el verificador recuerda los nonces que ya vio.</li>
+  <li><b>Timestamp</b>: se acepta el mensaje solo dentro de una ventana corta (±5 min), con relojes sincronizados.</li>
+  <li><b>El nonce y el timestamp van dentro de lo firmado</b>. Si no, el atacante los cambia.</li>
+</ul>
+
+<h2>8 · ¿Dónde se instala cada clave? (tabla para los ejercicios de diseño)</h2>
+<table>
+<tr><th>Escenario</th><th>El que se autentica tiene</th><th>El que verifica tiene</th></tr>
+<tr><td>Autenticar N clientes con claves sueltas (SSH)</td><td>Cada cliente C<sub>i</sub>: su par <span class="f">(K<sup>+</sup><sub>Ci</sub>, K<sup>−</sup><sub>Ci</sub>)</span>, o sea <b>N pares</b>.</td><td>Servidor: las <b>N públicas</b> <span class="f">K<sup>+</sup><sub>Ci</sub></span>, asociadas a cada usuario (authorized_keys).</td></tr>
+<tr><td>Autenticar el servidor con claves sueltas</td><td>Servidor: su par <span class="f">(K<sup>+</sup><sub>S</sub>, K<sup>−</sup><sub>S</sub>)</span>.</td><td>Cada cliente: <span class="f">K<sup>+</sup><sub>S</sub></span> (known_hosts).</td></tr>
+<tr><td>Con certificados de una CA</td><td>Su par + <b>su certificado firmado por la CA</b>.</td><td>Solo el <b>certificado de la CA</b> (<span class="f">K<sup>+</sup><sub>CA</sub></span>): <b>una sola clave</b> en lugar de N, y las altas y bajas no tocan al verificador.</td></tr>
+</table>
+<ul>
+  <li><b>Contraseña sobre HTTPS</b>: se puede robar, adivinar o reutilizar.</li>
+  <li><b>Claves públicas sueltas</b>: el verificador tiene que guardar N claves y hacer las altas y bajas a mano.</li>
+  <li><b>Certificados + TLS mutuo</b>: es lo que escala.</li>
+</ul>
+
+<h2>9 · SSL/TLS (ej. 4)</h2>
+<ul>
+  <li>Va <b>sobre TCP</b>, por debajo de la aplicación (HTTPS = HTTP sobre TLS, puerto 443). Es <b>orientado a conexión</b>.</li>
+  <li>Tiene dos subprotocolos: el <b>handshake</b> (establecer la conexión segura) y el <b>record</b> (usarla).</li>
+  <li>SSL fue el primero y TLS es su sucesor. No interoperan directamente, por eso se habla de "SSL/TLS".</li>
+</ul>
+<h3>Pasos</h3>
+<ol>
+  <li><b>HELLO</b>: se negocian versión, conjunto de algoritmos (cipher suite) y parámetros. Cada lado manda un <b>valor al azar</b> (nonce).</li>
+  <li><b>Autenticación</b>: el servidor manda su <b>certificado</b>. Opcionalmente pide el del cliente (TLS mutuo).</li>
+  <li><b>Key exchange</b>: el cliente genera la <b>pre-master secret</b> y la manda cifrada con la <b>pública del servidor</b> (sacada del certificado). Solo el servidor la puede leer.</li>
+  <li>Cada lado calcula por su cuenta la <b>master key</b> = f(pre-master, nonce<sub>C</sub>, nonce<sub>S</sub>), y de ahí las claves <b>simétricas de sesión</b>.</li>
+  <li><b>Data sharing</b>: todo viaja como <b>criptograma</b> con clave simétrica (rápida), más un MAC por registro.</li>
+</ol>
+<table>
+<tr><th>Parámetro</th><th>Etapa</th></tr>
+<tr><td>Versión de protocolo · Conjunto de algoritmos · Parámetros criptográficos</td><td>HELLO</td></tr>
+<tr><td>Valor al azar (nonce)</td><td>HELLO (se manda) y Key-Exchange (se usa para derivar la master)</td></tr>
+<tr><td>Certificado del peer · Clave maestra</td><td>Key-Exchange</td></tr>
+<tr><td>Criptograma</td><td>Data-sharing</td></tr>
+</table>
+<h3>Diagrama de secuencia (con TLS mutuo)</h3>
+<pre>Cliente                                              Servidor
+  |-- ClientHello: versión, suites, R_C --------------->|  en claro
+  |<-- ServerHello: suite elegida, R_S -----------------|  en claro
+  |<-- Certificate: Cert_S -----------------------------|  en claro
+  |<-- CertificateRequest  (solo si TLS mutuo) ---------|  en claro
+  |   (cliente valida Cert_S con K+_CA)                 |
+  |-- Certificate: Cert_C  (si se lo pidieron) -------->|  en claro
+  |-- ClientKeyExchange: E_{K+S}(PMS) ----------------->|  cifrado asimétrico
+  |-- CertificateVerify: E_{K-C}(H(handshake)) -------->|  firma = prueba de posesión
+  |   ambos: master = f(PMS, R_C, R_S) → claves de sesión
+  |-- ChangeCipherSpec + Finished --------------------->|  cifrado simétrico
+  |<-- ChangeCipherSpec + Finished ---------------------|  cifrado simétrico
+  |== datos de aplicación (HTTP) cifrados con K_sesión ==|</pre>
+<ul>
+  <li><b>Finished</b> lleva un MAC de todo el handshake, así se detecta si alguien tocó los mensajes en claro (por ejemplo, para bajar la suite).</li>
+  <li>Se pasa a una clave <b>simétrica</b> porque es mucho más rápida, y porque es una clave nueva por sesión: si alguien graba la sesión, no le sirve para otras.</li>
+  <li>Los <b>nonces</b> R<sub>C</sub> y R<sub>S</sub> evitan el replay de un handshake viejo.</li>
+</ul>
+<h3>TLS mutuo (ej. 6 y 7)</h3>
+<ul>
+  <li>Normalmente <b>solo el servidor</b> presenta certificado, y el cliente se autentica después con usuario y contraseña dentro del túnel.</li>
+  <li>Si el servidor quiere autenticar al cliente con certificados, el handshake suma <b>CertificateRequest → Certificate → CertificateVerify</b>.</li>
+  <li><b>CertificateVerify</b> (la firma del cliente sobre el handshake, nonces incluidos) es lo que prueba que tiene la privada.</li>
+  <li>El verificador chequea cuatro cosas:
+    <ol>
+      <li>¿Lo firmó nuestra CA?</li>
+      <li>¿Está vigente y no revocado?</li>
+      <li>¿Tiene la privada? (verifica el CertificateVerify)</li>
+      <li>¿Está autorizado? (por ejemplo, si pertenece al grupo habilitado)</li>
+    </ol>
+    Si falla algo, corta el handshake.</li>
+</ul>
+<div class="box"><b>Cómo leer cada caso:</b>
+<ul>
+  <li><b>Hay que autenticar al servidor (o al proxy)</b>: el servidor tiene su certificado y su privada, y los clientes tienen el certificado de la CA. Con eso los clientes evitan un proxy falso y, como la PMS va cifrada con la pública verdadera, además hay <b>confidencialidad</b>. Ese es el caso del hotel.</li>
+  <li><b>Hay que autenticar a los usuarios</b>: se suma TLS mutuo. Cada usuario tiene su certificado y su privada, y el proxy tiene el certificado de la CA.</li>
+</ul></div>
+
+<h2>10 · Seguridad por capas</h2>
+<table>
+<tr><th>Capa</th><th>Protocolo</th><th>Qué da</th></tr>
+<tr><td>Aplicación</td><td>SSH, PGP/S-MIME (mail), firmas en la URL de una API</td><td>Extremo a extremo de verdad: "la máxima seguridad se logra de extremo a extremo".</td></tr>
+<tr><td>Transporte</td><td>SSL/TLS (HTTPS, SMTPS, IMAPS)</td><td>Canal cifrado y autenticado por conexión.</td></tr>
+<tr><td>Red</td><td>IPsec: <b>AH</b> (integridad + autenticación + no repudio) · <b>ESP</b> (confidencialidad)</td><td>Transparente para las aplicaciones (VPNs).</td></tr>
+<tr><td>Enlace</td><td>WEP (roto) · WPA · WPA2</td><td>Protege solo el salto inalámbrico.</td></tr>
+</table>
+<p>Ninguna red es 100% segura. La gestión de seguridad de la información se rige por la familia de normas <b>ISO 27000</b>.</p>
+
+<h2>11 · Diseñar sin TLS ni sesiones: firmar cada pedido (ej. 8 y 9)</h2>
+<p>El método de la clase es partir de la versión más ingenua e ir preguntando, en cada paso, qué hace el atacante:</p>
+<table>
+<tr><th>Versión</th><th>Qué se agrega</th><th>Aut.</th><th>Integ.</th><th>No rep.</th><th>Replay</th><th>Por qué falla</th></tr>
+<tr><td>V0</td><td>nada</td><td class="no">×</td><td class="no">×</td><td class="no">×</td><td class="no">×</td><td>El servidor no sabe quién pidió.</td></tr>
+<tr><td>V1</td><td><span class="f">clientId=33</span></td><td class="no">×</td><td class="no">×</td><td class="no">×</td><td class="no">×</td><td>Decir quién sos no es probarlo: cualquiera escribe 33.</td></tr>
+<tr><td>V2</td><td><span class="f">pass=secreto</span></td><td class="no">×</td><td class="no">×</td><td class="no">×</td><td class="no">×</td><td>Viaja en claro: la leen y la reutilizan, y pueden cambiar la fruta.</td></tr>
+<tr><td>V3</td><td><span class="f">mac=HMAC_K(...)</span></td><td class="ok">✓</td><td class="ok">✓</td><td class="no">×</td><td class="no">×</td><td>El servidor también tiene K: "eso lo fabricó él".</td></tr>
+<tr><td>V4</td><td><span class="f">sig=E_{K-C}(H(...))</span></td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td><td class="no">×</td><td>Copian la URL y la reenvían mil veces.</td></tr>
+<tr><td>V5</td><td><span class="f">ts + nonce</span> <b>dentro</b> de la firma</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td><td>—</td></tr>
+</table>
+<ul>
+  <li><b>Cliente</b>:
+    <ul>
+      <li>Tiene su par de claves (la privada no sale de su máquina), su id y los algoritmos acordados (RSA + SHA-256).</li>
+      <li>Arma una <b>cadena canónica</b> con todos los parámetros en un orden fijo, calcula <span class="f">FIRMA = E<sub>K<sup>−</sup>C</sub>(H(cadena))</span> y la agrega a la URL en Base64URL.</li>
+    </ul></li>
+  <li><b>Servidor</b>:
+    <ul>
+      <li>Tiene una tabla id → <span class="f">K<sup>+</sup><sub>C</sub></span> cargada antes por canal seguro (o certificados), el reloj sincronizado y los nonces recientes. <b>No necesita privada propia</b>.</li>
+      <li>Busca la <span class="f">K<sup>+</sup></span>, chequea ts y nonce, recalcula el hash, verifica la firma y <b>guarda pedido + firma</b> como evidencia para el no repudio.</li>
+    </ul></li>
+  <li><b>Mensajes internos (ej. 8)</b>: es lo mismo aplicado a mensajes.
+    <ul>
+      <li>Cada empleado tiene su par de claves y un <b>certificado de la CA de la empresa</b> que lo ata a su identidad.</li>
+      <li>Firma cada mensaje. Para que no pueda negarlo, el mensaje incluye fecha y destinatario.</li>
+      <li>Se guarda el mensaje firmado.</li>
+      <li>Un MAC con clave compartida no alcanza, porque el que lo recibe también lo podría haber generado.</li>
+    </ul></li>
+</ul>
+
+<h2>12 · Blockchain (teórica, sin guía)</h2>
+<ul>
+  <li><b>Qué agrega a la firma</b>: la firma da autenticidad, integridad y no repudio, pero <b>no da orden</b>.
+    <ul>
+      <li>No dice cuál de dos mensajes fue primero.</li>
+      <li>No garantiza unicidad.</li>
+      <li>No garantiza que todos vean el mismo historial.</li>
+    </ul></li>
+  <li><b>Doble gasto</b>: Alice firma "moneda #42 → Bob" y también "moneda #42 → Carol". Las dos firmas verifican, y la criptografía no puede decidir cuál vale. Clásicamente lo resuelve un tercero (el banco).</li>
+  <li><b>Blockchain</b> = registro <b>append-only</b>, replicado entre nodos que <b>no confían entre sí</b>, que acuerdan <b>un único orden sin autoridad central</b>. Combina <b>hash → integridad</b>, <b>firmas → autoría</b> y <b>consenso → orden</b>.</li>
+  <li><b>Cadena de hashes</b>:
+    <ul>
+      <li>Cada header lleva <span class="f">prev = H(bloque anterior)</span>, la raíz de Merkle, el timestamp y el nonce.</li>
+      <li>Si alterás una transacción, cambia el hash de ese bloque, deja de coincidir el <span class="f">prev</span> del siguiente y se invalida toda la cadena posterior.</li>
+    </ul></li>
+  <li><b>Árbol de Merkle</b>:
+    <ul>
+      <li>La raíz (32 bytes) va en el header.</li>
+      <li>Para probar que una tx está incluida alcanzan <b>log₂(n)</b> hashes. Así verifican los clientes livianos (<b>SPV</b>) sin bajar el bloque entero.</li>
+    </ul></li>
+  <li><b>Identidad</b>:
+    <ul>
+      <li>Dirección = hash(clave pública). No hay registro de usuarios.</li>
+      <li>Una tx gasta salidas previas (<b>UTXO</b>) y se firma con la privada (ECDSA/Schnorr, curva secp256k1).</li>
+      <li>Cada nodo verifica la firma y que la salida exista y no esté gastada.</li>
+    </ul></li>
+  <li><b>Consenso</b>:
+    <ul>
+      <li><b>Generales bizantinos</b> (Lamport, Shostak, Pease, 1982): con f nodos maliciosos hacen falta <b>n ≥ 3f+1</b> participantes conocidos.</li>
+      <li>En una red abierta esto falla por el <b>ataque Sybil</b>: crear identidades es gratis, así que "un nodo, un voto" no sirve.</li>
+      <li>La solución de Nakamoto (2008) es <b>votar con un recurso escaso</b>: cómputo.</li>
+    </ul></li>
+  <li><b>Proof of Work</b> (Bitcoin):
+    <ul>
+      <li>Hay que encontrar un nonce tal que <span class="f">SHA256(SHA256(header)) &lt; target</span>. Es caro de producir y barato de verificar (un solo hash).</li>
+      <li>El target se reajusta cada 2016 bloques para sostener ~10 min por bloque.</li>
+      <li>Gana la cadena <b>con más trabajo</b> acumulado. Minar es una lotería con probabilidad proporcional al cómputo.</li>
+    </ul></li>
+  <li><b>Confirmaciones</b>:
+    <ul>
+      <li>Si el atacante tiene q &lt; 50% del cómputo, su probabilidad de alcanzar a la cadena honesta cae exponencialmente con z bloques. Por ejemplo, con q=10% alcanzan z=5 para P&lt;0,1%.</li>
+      <li>Con <b>q ≥ 50%</b> (ataque del 51%) gana siempre.</li>
+      <li>"6 confirmaciones" (~1 h) es una convención, no un teorema.</li>
+    </ul></li>
+  <li><b>La mirada de redes</b>:
+    <ul>
+      <li>La difusión es por <b>gossip</b> (cada nodo reenvía a sus pares).</li>
+      <li>Hay <b>forks transitorios</b> cuando dos mineros encuentran un bloque casi a la vez. Se resuelven por la cadena con más trabajo y el otro bloque queda <b>huérfano</b>.</li>
+      <li>Bloques más rápidos ⇒ más forks y más trabajo perdido (latencia vs intervalo). Bitcoin hace ~7 tx/s.</li>
+    </ul></li>
+</ul>
+<table>
+<tr><th></th><th>Proof of Work</th><th>Proof of Stake</th><th>BFT (PBFT)</th></tr>
+<tr><td>Recurso escaso</td><td>Cómputo (energía)</td><td>Capital en garantía (slashing si hace trampa)</td><td>Identidad conocida</td></tr>
+<tr><td>Red</td><td>Abierta</td><td>Abierta</td><td>Permisionada</td></tr>
+<tr><td>Finalidad</td><td>Probabilística</td><td>Económica, por checkpoints</td><td>Inmediata</td></tr>
+<tr><td>Tolera</td><td>&lt; 50% del cómputo</td><td>&lt; 1/3 del stake</td><td>f &lt; n/3 nodos</td></tr>
+<tr><td>Ejemplo</td><td>Bitcoin</td><td>Ethereum (desde 2022)</td><td>CometBFT (Cosmos)</td></tr>
+</table>
+<ul>
+  <li><b>Ethereum</b> funciona como <b>máquina de estados replicada</b>: <span class="f">estado<sub>n+1</sub> = δ(estado<sub>n</sub>, txs)</span> (Schneider 1990), pero entre nodos que no confían entre sí.
+    <ul>
+      <li><b>Smart contracts</b>: el código corre en la EVM.</li>
+      <li><b>Gas</b>: cada instrucción cuesta, lo que acota el cómputo y corta los loops infinitos.</li>
+      <li>Los bugs son <b>inmutables</b> (caso The DAO, 2016).</li>
+    </ul></li>
+  <li><b>Cuándo conviene una blockchain</b>: cuando muchos escriben, no confían entre sí, no hay un tercero aceptable para todos y el historial debe ser verificable públicamente. Si hay un tercero confiable, <b>una base de datos replicada es más simple, rápida y barata</b>.</li>
+</ul>
+
+<h2>13 · Mapa de la guía</h2>
+<table>
+<tr><th>Ej.</th><th>Tema</th><th>Mirá</th></tr>
+<tr><td>1</td><td>Romper un César: estrategia</td><td>§2 (fuerza bruta / frecuencias / palabras cortas)</td></tr>
+<tr><td>2</td><td>Firma + confidencialidad con el esquema de cajas</td><td>§4 regla de claves, §5 esquema</td></tr>
+<tr><td>3</td><td>MITM en el intercambio de públicas, qué tiene un certificado</td><td>§6</td></tr>
+<tr><td>4</td><td>Parámetros → etapa de TLS, diagrama de secuencia</td><td>§9</td></tr>
+<tr><td>5</td><td>SSH challenge-response: dónde van las claves; versión con certificados</td><td>§7, §8</td></tr>
+<tr><td>6</td><td>Proxy HTTPS que autentica usuarios</td><td>§8, §9 TLS mutuo</td></tr>
+<tr><td>7</td><td>WiFi de hotel: autenticidad del proxy + confidencialidad</td><td>§9 (el 6 al revés)</td></tr>
+<tr><td>8</td><td>No repudio en mensajes internos</td><td>§5, §11</td></tr>
+<tr><td>9</td><td>API HTTP sin cifrar ni sesiones: integridad + no repudio</td><td>§11 (V0→V5)</td></tr>
+</table>
+
+</body>
+</html>
