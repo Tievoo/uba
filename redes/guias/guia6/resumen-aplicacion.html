@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Resumen Aplicación</title>
+<style>
+  @page { size: A4; margin: 14mm 14mm; }
+  :root { --ink:#1b1b1b; --muted:#555; --accent:#1f6fb2; --warn:#b3261e; --box:#f3f6fa; --line:#d6dde6; }
+  body { font-family: "Segoe UI", Arial, sans-serif; font-size: 10.5pt; line-height: 1.38; color: var(--ink); background:#fff; margin:0; }
+  h1 { font-size: 18pt; margin: 0 0 2px; }
+  .sub { color: var(--muted); margin: 0 0 12px; }
+  h2 { font-size: 13pt; color: var(--accent); border-bottom: 2px solid var(--accent); padding-bottom: 2px; margin: 18px 0 8px; break-after: avoid; }
+  h3 { font-size: 11pt; margin: 12px 0 4px; break-after: avoid; }
+  p { margin: 4px 0 6px; }
+  ul, ol { margin: 4px 0 6px; padding-left: 18px; }
+  li { margin: 2px 0; }
+  code, .f, pre { font-family: Consolas, "Courier New", monospace; font-size: 9.4pt; }
+  pre { background:#f6f6f6; border:1px solid var(--line); padding:6px 8px; margin:6px 0; white-space: pre-wrap; break-inside: avoid; }
+  .box { background: var(--box); border-left: 4px solid var(--accent); padding: 6px 10px; margin: 8px 0; break-inside: avoid; }
+  .warn { background: #fdf1f0; border-left: 4px solid var(--warn); padding: 6px 10px; margin: 8px 0; break-inside: avoid; }
+  table { border-collapse: collapse; width: 100%; margin: 6px 0 8px; break-inside: avoid; }
+  th, td { border: 1px solid var(--line); padding: 3px 6px; text-align: left; vertical-align: top; }
+  th { background: #e8eef5; }
+  .tag { display:inline-block; background: var(--accent); color:#fff; border-radius: 3px; padding: 0 5px; font-size: 8.5pt; font-weight: 600; }
+  .diag { width: 100%; max-width: 600px; display:block; margin: 6px auto; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .pb { break-before: page; }
+</style>
+</head>
+<body>
+
+<h1>Aplicación — Guía 6</h1>
+<p class="sub">RCCD 2C 2026 · Resumen de la teórica 16 (Nivel de Aplicación), las prácticas de DNS y de Correo/HTTP, y los temas de la guía 6.</p>
+
+<h2>0 · La idea en criollo (ELI5)</h2>
+<p>Las capas de abajo ya saben llevar bytes de una compu a otra (IP) y entregarlos sin perderse a un <b>proceso</b> (TCP/UDP). La capa de aplicación es el <b>idioma</b> que hablan dos programas por encima de eso: qué mensajes existen, qué campos tienen y quién habla primero. Casi todo es <b>pedido → respuesta, en texto ASCII legible</b>.</p>
+<ul>
+  <li><b>DNS</b> es la <b>guía telefónica</b> de Internet: vos sabés el nombre (<span class="f">www.dc.uba.ar</span>) y necesitás el número (la IP). Nadie tiene la guía entera. Cada zona tiene su pedacito, y hay un "secretario" (el <b>resolver</b>) que va preguntando hasta encontrarla y se anota la respuesta por un rato (<b>caché + TTL</b>).</li>
+  <li><b>El mail</b> es el <b>correo postal</b>. Tu programa de mail le deja la carta a tu oficina de correo (<b>servidor saliente, SMTP</b>). Esa oficina busca en DNS cuál es la oficina del destinatario (<b>registro MX</b>) y se la lleva (<b>SMTP</b> otra vez). El destinatario la retira de su casilla con <b>POP3</b> (se la lleva a casa) o con <b>IMAP</b> (la lee en la oficina, sincronizada).</li>
+  <li><b>La web (HTTP)</b> es pedir cosas en un mostrador: "dame <span class="f">/index.html</span>" y te la dan. La página trae referencias a otras cosas (imágenes, CSS), y el navegador las pide <b>una por una</b>. El servidor <b>no se acuerda de vos</b> entre pedido y pedido (stateless): para eso existen las <b>cookies</b>.</li>
+</ul>
+<div class="box"><b>El orden de las cosas siempre es:</b> nombre → <b>DNS</b> (UDP 53) → IP → <b>conexión TCP</b> (handshake: 1 RTT) → mensajes de aplicación (HTTP/SMTP/POP3/IMAP) → cierre. Los ejercicios integradores (10, 11, 12) consisten en escribir esa cadena completa para cada host que aparece.</div>
+
+<h2>1 · Generalidades de la capa de aplicación</h2>
+<ul>
+  <li><b>Proceso</b>: programa corriendo en un host. Dos procesos en hosts distintos se hablan con un protocolo de aplicación. Un <b>socket</b> es la "puerta" del proceso hacia el transporte.</li>
+  <li>A un proceso se lo identifica con <b>IP + puerto</b>. Con la IP sola no alcanza, porque en un host corren muchos procesos.</li>
+  <li><b>Agente de usuario</b>: la interfaz entre el usuario y la red (navegador, Thunderbird). Ojo: <b>aplicación ≠ protocolo</b> (Firefox ≠ HTTP).</li>
+  <li><b>Cliente-servidor</b>: el cliente <b>habla primero</b> y pide. El servidor atiende en un puerto conocido. También existen P2P, modelos híbridos y RPC.</li>
+  <li>Un protocolo define: los <b>tipos de mensaje</b> (pedido/respuesta), su <b>sintaxis</b> (campos), su <b>semántica</b> (qué significan) y las <b>reglas</b> de cuándo se envían. Los públicos están en RFCs (interoperabilidad).</li>
+</ul>
+<h3>TCP vs UDP — qué elige cada app</h3>
+<p><b>TCP</b>: orientado a conexión, confiable, control de flujo y de congestión. <b>UDP</b>: nada de eso, solo multiplexa con puertos. Ninguno de los dos garantiza tiempos ni ancho de banda. Las apps se eligen según tres criterios: <b>tolerancia a pérdidas</b>, <b>sensibilidad al delay</b> y <b>ancho de banda</b> (por ejemplo, el mail no tolera pérdidas pero sí demora; la voz tolera pérdidas pero no demora).</p>
+<table>
+<tr><th>Protocolo</th><th>Transporte</th><th>Puerto</th><th>Para qué</th></tr>
+<tr><td>DNS</td><td><b>UDP</b> (TCP para transferencias de zona / respuestas grandes)</td><td>53</td><td>nombre → IP y otros registros</td></tr>
+<tr><td>HTTP / HTTPS</td><td>TCP</td><td>80 / 443</td><td>web</td></tr>
+<tr><td>SMTP</td><td>TCP</td><td>25 (587 submission)</td><td>enviar mail: UA → saliente → entrante</td></tr>
+<tr><td>POP3</td><td>TCP</td><td>110 (995 con TLS)</td><td>bajar mail del buzón</td></tr>
+<tr><td>IMAP</td><td>TCP</td><td>143 (993 con TLS)</td><td>leer mail en el servidor, sincronizado</td></tr>
+</table>
+<p><b>Ej. 1 de la guía (5 clientes a la vez):</b> alcanza <b>1 servidor</b>, <b>1 IP</b> y <b>1 puerto</b> (el 80). TCP distingue cada conexión por la 4-upla <span class="f">(IP orig, puerto orig, IP dest, puerto dest)</span>: los clientes usan puertos efímeros distintos, así que no chocan. Si crece la cantidad de clientes, el límite es de <b>capacidad</b> del servidor, no de puertos. Se escala con más servidores detrás de un balanceador, o con DNS que devuelva varias IPs.</p>
+
+<h2>2 · DNS — Domain Name System (RFC 1034/1035)</h2>
+<h3>Por qué existe y cómo está organizado</h3>
+<p>Antes había un <span class="f">hosts.txt</span> central: no escalaba y era propenso a errores. DNS es una <b>base de datos distribuida y jerárquica</b> que separa el <b>nombre</b> de un host de su <b>dirección</b>.</p>
+<ul>
+  <li><b>Namespace jerárquico</b>: raíz <span class="f">.</span> → TLD (<span class="f">ar</span>, <span class="f">com</span>; ccTLD = de país) → <span class="f">uba</span> → <span class="f">dc</span>. Dos hermanos no pueden llamarse igual. Lo administra ICANN.</li>
+  <li><b>FQDN</b> (nombre absoluto, termina en punto: <span class="f">mail.dc.uba.ar.</span>) vs <b>PQDN</b> (relativo: <span class="f">mail</span>). En un archivo de zona, <b>un nombre sin punto final se completa con la zona</b>: <span class="f">mailserver</span> en la zona uba.ar es <span class="f">mailserver.uba.ar</span>, y en la zona dc.uba.ar es <span class="f">mailserver.dc.uba.ar</span> (son distintos).</li>
+  <li><b>Zona</b> = porción del árbol bajo una misma autoridad administrativa. Una zona puede <b>delegar</b> un subdominio a otra zona: uba.ar delega dc.uba.ar con un registro NS.</li>
+</ul>
+<h3>Componentes</h3>
+<ul>
+  <li><b>Name servers autoritativos</b>: tienen los registros oficiales de su zona. Hay un <b>primario</b> (master, el que se edita) y <b>secundarios</b> (copias que se actualizan desde el primario cuando cambia el <i>serial</i> del SOA).</li>
+  <li><b>Resolver</b> (servidor <b>no autoritativo</b>, local o del ISP): recibe las consultas de los clientes, sale a resolverlas y <b>cachea</b> las respuestas.</li>
+  <li>En el host, la app llama al <b>resolver de biblioteca</b> (<span class="f">gethostbyname</span>), que manda un paquete <b>UDP</b> al resolver local. Recién con la IP la app abre la conexión TCP.</li>
+</ul>
+
+<h3>Registros (Resource Records): <span class="f">nombre  TTL  clase  tipo  valor</span></h3>
+<table>
+<tr><th>Tipo</th><th>Significa</th><th>Valor</th></tr>
+<tr><td><b>A</b> / AAAA</td><td>dirección de un host</td><td>IPv4 / IPv6</td></tr>
+<tr><td><b>CNAME</b></td><td>alias: "este nombre es otro nombre"</td><td>nombre canónico (se sigue la cadena hasta un A)</td></tr>
+<tr><td><b>MX</b></td><td>servidor que <b>recibe</b> el mail del dominio</td><td>prioridad + nombre (<b>menor número = mayor prioridad</b>)</td></tr>
+<tr><td><b>NS</b></td><td>name server autoritativo de la zona</td><td>nombre del servidor</td></tr>
+<tr><td><b>SOA</b></td><td>comienzo de autoridad (uno por zona)</td><td>primario, mail admin, serial, refresh, retry, expire, minimum</td></tr>
+<tr><td>PTR</td><td>resolución inversa (IP → nombre)</td><td>nombre</td></tr>
+<tr><td>TXT / HINFO</td><td>texto libre / descripción del host</td><td>ASCII</td></tr>
+</table>
+<p><b>SOA en detalle</b> (<span class="f">dc.uba.ar. IN SOA ns1.dc.uba.ar. admin.dc.uba.ar. (serial refresh retry expire minimum)</span>):</p>
+<ul>
+  <li>El <b>primer nombre es el primario</b>. El segundo es el mail del admin, con la @ reemplazada por un punto.</li>
+  <li><b>serial</b>: versión de la zona (fecha AAAAMMDDnn). Si no se incrementa, los secundarios no copian los cambios.</li>
+  <li><b>refresh</b>: cada cuánto el secundario consulta al primario. <b>retry</b>: cuánto espera para reintentar si falló. <b>expire</b>: cuándo deja de responder si el primario no contesta.</li>
+  <li><b>minimum</b>: TTL de la <b>caché negativa</b>, o sea cuánto se recuerda un "ese nombre no existe".</li>
+</ul>
+
+<h3>Consultas y respuestas</h3>
+<table>
+<tr><th></th><th>Qué es</th><th>Quién la usa</th></tr>
+<tr><td><b>Consulta recursiva</b></td><td>"resolvémelo vos y traeme la respuesta final"</td><td>cliente → resolver</td></tr>
+<tr><td><b>Consulta iterativa</b></td><td>"decime lo que sepas": la respuesta o <b>a quién preguntarle</b> (referral)</td><td>resolver → root, TLD, autoritativos</td></tr>
+<tr><td><b>Respuesta autoritativa</b> (flag aa)</td><td>viene de un servidor primario o secundario de la zona</td><td>autoritativo</td></tr>
+<tr><td><b>Respuesta no autoritativa</b></td><td>viene de la <b>caché</b> de alguien</td><td>resolver</td></tr>
+</table>
+<svg viewBox="0 0 600 210" class="diag">
+  <defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="#333"/></marker></defs>
+  <g font-size="10" text-anchor="middle">
+    <rect x="10" y="85" width="80" height="34" rx="4" fill="#e8eef5" stroke="#1f6fb2"/><text x="50" y="106">Cliente</text>
+    <rect x="160" y="85" width="90" height="34" rx="4" fill="#e8eef5" stroke="#1f6fb2"/><text x="205" y="100">Resolver</text><text x="205" y="112" font-size="8.5">(caché)</text>
+    <rect x="370" y="5" width="110" height="30" rx="4" fill="#fff" stroke="#888"/><text x="425" y="24">raíz  .</text>
+    <rect x="370" y="60" width="110" height="30" rx="4" fill="#fff" stroke="#888"/><text x="425" y="79">ar</text>
+    <rect x="370" y="115" width="110" height="30" rx="4" fill="#fff" stroke="#888"/><text x="425" y="134">uba.ar</text>
+    <rect x="370" y="170" width="110" height="30" rx="4" fill="#fff" stroke="#888"/><text x="425" y="189">dc.uba.ar (autoritativo)</text>
+  </g>
+  <g stroke="#333" fill="none" marker-end="url(#ar)" stroke-width="1.2">
+    <line x1="90" y1="96" x2="158" y2="96"/><line x1="158" y1="110" x2="92" y2="110"/>
+    <line x1="250" y1="90" x2="368" y2="22"/><line x1="250" y1="95" x2="368" y2="77"/><line x1="250" y1="105" x2="368" y2="130"/><line x1="250" y1="112" x2="368" y2="184"/>
+  </g>
+  <g font-size="8.5" fill="#1f6fb2">
+    <text x="124" y="90" text-anchor="middle">1 recursiva</text><text x="124" y="125" text-anchor="middle">8 respuesta</text>
+    <text x="300" y="45">2-3 "preguntale a ar"</text><text x="300" y="80">4-5 "a uba.ar"</text><text x="290" y="128">6 "a dc.uba.ar"</text><text x="285" y="165">7 aa: A 157.92…</text>
+  </g>
+  <text x="500" y="105" font-size="8.5" fill="#555">iterativas: cada uno</text><text x="500" y="117" font-size="8.5" fill="#555">responde lo que sabe</text>
+</svg>
+<ul>
+  <li><b>Referral</b>: cuando un servidor no es autoritativo del nombre pedido (porque la zona está delegada), responde con el <b>NS de la zona hija</b> en la sección AUTHORITY.</li>
+  <li><b>Glue record</b>: si el NS de la zona hija está <i>dentro</i> de la zona hija (por ejemplo, <span class="f">servidores.dc.uba.ar</span> es NS de <span class="f">dc.uba.ar</span>), la zona padre incluye también su registro <b>A</b> (en ADDITIONAL). Sin ese registro habría una dependencia circular.</li>
+  <li><b>Secciones de una respuesta</b>: ANSWER (lo pedido), AUTHORITY (los NS), ADDITIONAL (registros A de regalo, por ejemplo el A del servidor MX, que ahorran otra consulta).</li>
+  <li><b>Caché</b>: el resolver guarda <b>todo</b> lo que recibe (answer, NS, glue) durante el <b>TTL</b> de cada registro. La próxima consulta arranca desde el <b>ancestro más cercano que conozca</b>, no desde la raíz.</li>
+</ul>
+<div class="warn"><b>TTL y cambios de IP</b> (salió en el 2do parcial de 2024): si un registro A con TTL de 3 días cambia de IP, los resolvers que lo tenían cacheado siguen respondiendo la <b>IP vieja</b> (como respuesta no autoritativa) hasta que vence el TTL. Recién después vuelven a preguntar al autoritativo y obtienen la nueva. El cambio <b>no se propaga</b>: hay que esperar que expiren las cachés. Por eso se baja el TTL antes de una migración.</div>
+<p><b>CDN vía DNS</b>: el autoritativo de la CDN devuelve una IP distinta según dónde esté el que pregunta. Así cada usuario termina en la réplica más cercana.</p>
+
+<h2>3 · Correo electrónico — SMTP, formato, MIME, POP3, IMAP</h2>
+<svg viewBox="0 0 600 120" class="diag">
+  <defs><marker id="ar2" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="#333"/></marker></defs>
+  <g font-size="9.5" text-anchor="middle">
+    <rect x="5" y="40" width="85" height="40" rx="4" fill="#e8eef5" stroke="#1f6fb2"/><text x="47" y="58">User Agent</text><text x="47" y="71" font-size="8.5">emisor</text>
+    <rect x="135" y="40" width="95" height="40" rx="4" fill="#fff" stroke="#888"/><text x="182" y="58">Servidor saliente</text><text x="182" y="71" font-size="8.5">(cola de salida)</text>
+    <rect x="290" y="40" width="105" height="40" rx="4" fill="#fff" stroke="#888"/><text x="342" y="58">Servidor entrante</text><text x="342" y="71" font-size="8.5">(MX del destino, buzón)</text>
+    <rect x="455" y="40" width="85" height="40" rx="4" fill="#e8eef5" stroke="#1f6fb2"/><text x="497" y="58">User Agent</text><text x="497" y="71" font-size="8.5">receptor</text>
+  </g>
+  <g stroke="#333" marker-end="url(#ar2)" stroke-width="1.2"><line x1="90" y1="60" x2="133" y2="60"/><line x1="230" y1="60" x2="288" y2="60"/><line x1="453" y1="60" x2="397" y2="60"/></g>
+  <g font-size="8.5" fill="#1f6fb2" text-anchor="middle"><text x="112" y="35">SMTP</text><text x="260" y="35">SMTP</text><text x="425" y="35">POP3 / IMAP</text><text x="260" y="100" fill="#b3261e">antes: DNS MX del dominio destino + A</text><text x="425" y="100" fill="#555">(el receptor PIDE: pull)</text></g>
+</svg>
+<ul>
+  <li><b>SMTP es push</b>: siempre lo inicia el que <i>tiene</i> el mail. Por eso para <b>leer</b> hace falta otro protocolo (POP3/IMAP), que es <b>pull</b>.</li>
+  <li>El servidor saliente busca el <b>MX</b> del dominio del destinatario (y su A) en DNS, y se conecta por SMTP al puerto 25. Si hay varios MX, prueba por prioridad. Puede haber <b>relays</b> intermedios.</li>
+  <li><b>Webmail</b>: entre el navegador y el servidor de webmail se habla <b>HTTP(S)</b>, no SMTP ni POP3. Es el servidor de webmail el que después usa SMTP hacia afuera y lee el buzón por su cuenta.</li>
+</ul>
+<h3>Sesión SMTP (comando ASCII → código numérico + frase)</h3>
+<div class="two">
+<pre>S: 220 mail.destino.com ESMTP listo
+C: HELO origen.com          (o EHLO)
+S: 250 Hello
+C: MAIL FROM: &lt;yo@origen.com&gt;
+S: 250 Ok
+C: RCPT TO: &lt;vos@destino.com&gt;   (se repite)
+S: 250 Ok
+C: DATA
+S: 354 End with &lt;CRLF&gt;.&lt;CRLF&gt;
+C: From: ... To: ... Subject: ...
+C: (línea en blanco) cuerpo...
+C: .
+S: 250 Ok: queued
+C: QUIT
+S: 221 Bye</pre>
+<div>
+<p><b>Códigos</b>: 2xx ok (220 listo, 250 ok, 221 chau) · 3xx esperando (354 mandá los datos) · 4xx error temporal (421) · 5xx error permanente (550 no existe el buzón).</p>
+<p>Otros comandos: RSET (cancela la transacción), VRFY.</p>
+<p><b>Sobre vs. carta</b>: <span class="f">MAIL FROM / RCPT TO</span> son el <b>sobre</b> (envelope), que es lo que usa SMTP para enrutar. <span class="f">From: / To:</span> van dentro de DATA: son la <b>carta</b> (headers RFC 822), lo que ve el usuario. Pueden no coincidir (BCC, listas de correo, spam).</p>
+<p>Las tres fases son saludo, transferencia y cierre. Por <b>una</b> conexión TCP se pueden mandar varios mails.</p>
+</div>
+</div>
+<h3>Formato del mensaje (RFC 822) y MIME (RFC 2045)</h3>
+<p>Un mensaje es: <b>headers</b> (<span class="f">From:</span>, <span class="f">To:</span>, <span class="f">Subject:</span>, <span class="f">Date:</span>…), una <b>línea en blanco</b> y el <b>cuerpo</b>. Originalmente era <b>solo ASCII de 7 bits</b>.</p>
+<p><b>MIME</b> resuelve cómo mandar imágenes, HTML, adjuntos y acentos <b>sin cambiar SMTP ni los servidores</b> (ej. 8 de la guía). Solo agrega headers y una convención de codificación:</p>
+<pre>MIME-Version: 1.0
+Content-Type: image/jpeg                 ← tipo/subtipo (text/html, application/pdf, video/mpeg...)
+Content-Transfer-Encoding: base64        ← cómo se pasó a ASCII
+(línea en blanco)
+/9j/4AAQSkZJRgABAQEASABIAAD...           ← datos codificados</pre>
+<ul>
+  <li>Hay 7 tipos de primer nivel: text, image, audio, video, application, multipart, message.</li>
+  <li><b>multipart/mixed; boundary="XYZ"</b>: varias partes en un solo mensaje, separadas por <span class="f">--XYZ</span>. Cada parte tiene su propio Content-Type (framing con delimitadores).</li>
+  <li><b>base64</b>: 3 bytes binarios → 4 caracteres ASCII (+33% de tamaño). <b>quoted-printable</b>: para texto casi-ASCII (acentos).</li>
+  <li>HTTP <b>reusa</b> los tipos MIME en su header <span class="f">Content-Type</span> (ej. 9 de la guía).</li>
+</ul>
+<h3>POP3 vs IMAP</h3>
+<table>
+<tr><th></th><th>POP3 (RFC 1939, TCP 110)</th><th>IMAP (RFC 3501, TCP 143)</th></tr>
+<tr><td>Paradigma</td><td><b>download and delete</b>: bajo y borro del servidor</td><td><b>keep and sync</b>: todo queda en el servidor</td></tr>
+<tr><td>Estado</td><td>no sincroniza (leído/no leído, carpetas)</td><td>carpetas, flags (\Seen, \Deleted…), búsquedas en el servidor, varios dispositivos</td></tr>
+<tr><td>Descarga parcial</td><td>no (mensaje entero)</td><td>sí: solo headers o una parte MIME (FETCH)</td></tr>
+<tr><td>Fases / comandos</td><td>autorización (USER, PASS) → transacción (STAT, LIST, RETR n, DELE n, RSET) → <b>update</b> al QUIT (ahí se borra)</td><td>LOGIN, LIST, SELECT, FETCH, STORE, EXPUNGE, LOGOUT. Comandos con <b>tag</b> (a1, a2…) → se pueden mandar varios a la vez</td></tr>
+<tr><td>Respuestas</td><td><span class="f">+OK</span> / <span class="f">-ERR</span></td><td><span class="f">a1 OK</span> / <span class="f">NO</span> (falla) / <span class="f">BAD</span> (sintaxis); <span class="f">*</span> = respuesta no etiquetada (datos)</td></tr>
+</table>
+
+<h2>4 · Web — HTTP</h2>
+<ul>
+  <li>Una <b>página</b> es un HTML base más <b>objetos</b> referenciados (imágenes, CSS, JS). Cada objeto tiene su <b>URL</b> = host + ruta.</li>
+  <li>HTTP es <b>cliente/servidor sobre TCP (80)</b>, en <b>texto ASCII</b>, y es <b>sin estado</b>: el servidor no recuerda pedidos anteriores. Es más simple y robusto ante caídas.</li>
+</ul>
+<div class="two">
+<pre>GET /dir/pagina.html HTTP/1.1      ← línea de pedido
+Host: www.dc.uba.ar                ← obligatorio en 1.1
+User-Agent: Mozilla/5.0
+Accept-Language: es
+Connection: close
+(línea en blanco)                  ← fin de headers
+[cuerpo: solo POST/PUT]</pre>
+<pre>HTTP/1.1 200 OK                    ← línea de estado
+Date: Thu, 06 Aug 1998 12:00:15 GMT
+Server: Apache/1.3.0
+Last-Modified: Mon, 22 Jun 1998 ...
+Content-Length: 6821
+Content-Type: text/html
+(línea en blanco)
+&lt;html&gt;...                          ← cuerpo</pre>
+</div>
+<h3>Métodos</h3>
+<table>
+<tr><th>Método</th><th>Qué hace</th><th>Detalle</th></tr>
+<tr><td><b>GET</b></td><td>pide un recurso</td><td>sin cuerpo; los parámetros van en la URL (<span class="f">?a=1&amp;b=2</span>); idempotente y cacheable</td></tr>
+<tr><td><b>HEAD</b></td><td>igual que GET pero <b>sin cuerpo</b> en la respuesta</td><td>para ver si existe, el tipo, el tamaño o la fecha de modificación (validar caché)</td></tr>
+<tr><td><b>POST</b></td><td>envía datos (formularios, crear un recurso)</td><td>datos en el <b>cuerpo</b>, con <span class="f">Content-Type</span> y <span class="f">Content-Length</span>; <b>no idempotente</b></td></tr>
+<tr><td>PUT / DELETE</td><td>sube/reemplaza un recurso / lo borra</td><td>en HTTP/1.1</td></tr>
+</table>
+<p><b>GET vs POST</b> (salió en el 2do parcial de 2024): GET <i>pide</i>, no tiene cuerpo, sus parámetros quedan visibles en la URL (y en el historial y los logs), se puede cachear, y repetirlo no cambia nada. POST <i>manda</i> datos en el cuerpo, sirve para cambiar estado en el servidor (crear, comprar) y repetirlo puede duplicar la acción.</p>
+<h3>Códigos de estado</h3>
+<p>1xx informativo · <b>2xx</b> éxito (200 OK, 201 Created) · <b>3xx</b> redirección (301 Moved Permanently + <span class="f">Location:</span>, <b>304 Not Modified</b>) · <b>4xx</b> error del cliente (400 Bad Request, 401 Unauthorized, 404 Not Found) · <b>5xx</b> error del servidor (500, 505 HTTP Version Not Supported).</p>
+<h3>Headers clave</h3>
+<table>
+<tr><th>Header</th><th>Dónde</th><th>Para qué</th></tr>
+<tr><td>Host</td><td>pedido</td><td>dominio pedido. Permite <b>virtual hosting</b> (varios sitios en una misma IP)</td></tr>
+<tr><td>Content-Type / Content-Length</td><td>ambos</td><td>tipo MIME y tamaño del cuerpo</td></tr>
+<tr><td><b>If-Modified-Since</b></td><td>pedido</td><td><b>GET condicional</b>: si no cambió → <b>304</b> sin cuerpo; si cambió → 200 con el archivo</td></tr>
+<tr><td>Last-Modified / Cache-Control / Expires</td><td>respuesta</td><td>info para cachear</td></tr>
+<tr><td>Authorization / WWW-Authenticate</td><td>pedido / respuesta 401</td><td>credenciales (van en <b>cada</b> pedido, porque es stateless)</td></tr>
+<tr><td>Set-Cookie / Cookie</td><td>respuesta / pedido</td><td>estado sobre un protocolo stateless</td></tr>
+<tr><td>Connection: close / keep-alive</td><td>ambos</td><td>cerrar o mantener la conexión TCP</td></tr>
+<tr><td>Via</td><td>pedido (lo agrega el proxy)</td><td>marca que pasó por un proxy</td></tr>
+</table>
+
+<h3>Tiempo de respuesta en RTTs</h3>
+<p>Para cada objeto se suman: <b>1 RTT</b> de handshake TCP (SYN → SYN+ACK; el ACK viaja junto con el GET) + <b>1 RTT</b> de GET → respuesta + tiempo de transmisión. El cierre (FIN) <b>no suma</b>, porque no bloquea el pedido siguiente.</p>
+<table>
+<tr><th>Modo</th><th>Cómo</th><th>Página con HTML + N objetos</th></tr>
+<tr><td><b>HTTP/1.0 no persistente</b></td><td>una conexión TCP <b>por objeto</b></td><td>2 RTT × (1 + N)</td></tr>
+<tr><td><b>1.1 persistente sin pipelining</b></td><td>misma conexión; el próximo pedido sale cuando llegó la respuesta anterior</td><td>2 RTT (HTML) + N × 1 RTT</td></tr>
+<tr><td><b>1.1 persistente con pipelining</b></td><td>todos los pedidos en ráfaga, sin esperar</td><td>2 RTT (HTML) + 1 RTT</td></tr>
+</table>
+<p>Ojo: <b>no se pueden pedir los objetos hasta tener el HTML</b>, porque ahí es donde aparecen. Tampoco suman: los navegadores pueden abrir <b>conexiones paralelas</b> (en 1.0 los N objetos irían en paralelo: 2 + 2 RTT). Si no se dice nada, se asume secuencial.</p>
+<p><b>Qué tags de HTML disparan pedidos automáticos</b>: <span class="f">&lt;img src&gt;</span>, <span class="f">&lt;link rel="stylesheet" href&gt;</span>, <span class="f">&lt;script src&gt;</span>, <span class="f">&lt;audio/video src&gt;</span>, <span class="f">&lt;input type="image" src&gt;</span>, <span class="f">&lt;iframe src&gt;</span> (que es otra página entera, con sus propios objetos). <b>No disparan</b>: <span class="f">&lt;a href&gt;</span> (requiere clic) ni <span class="f">&lt;form action&gt;</span> (requiere submit). Si un objeto está en <b>otro host</b>, requiere otra consulta DNS y otra conexión TCP.</p>
+
+<h3>Proxy / caché web, cookies, CDN</h3>
+<ul>
+  <li><b>Proxy</b>: el navegador le pide <b>todo</b> al proxy (necesita resolver por DNS solo la IP del proxy, si no la tiene configurada). El proxy actúa de servidor para el cliente y de cliente para el servidor. <b>Hit</b>: responde desde su caché. <b>Miss</b>: le pide al servidor de origen (con DNS y TCP propios), cachea y reenvía. Ventajas: menos tiempo de respuesta y menos tráfico WAN. Puede validar con GET condicional.</li>
+  <li><b>Cookies</b>: en la primera respuesta el servidor manda <span class="f">Set-Cookie: 1678</span> y lo guarda en su base de datos. El navegador lo devuelve en cada pedido con <span class="f">Cookie: 1678</span>. Tiene 4 partes: header de respuesta, header de pedido, archivo en el cliente y base de datos en el servidor. Sirve para sesiones y carritos (y para <b>tracking</b>).</li>
+  <li><b>CDN</b>: servidores de réplica dentro de los ISPs. El usuario llega a la réplica más cercana por <b>redirección DNS</b> (un CNAME hacia el dominio de la CDN, que resuelve según la ubicación).</li>
+  <li>HTTPS = HTTP sobre TLS (puerto 443). Lo ves en la guía 7.</li>
+</ul>
+
+<h2 class="pb">5 · Tipos de ejercicio de la guía y cómo se encaran</h2>
+
+<h3><span class="tag">A</span> Conceptuales — ej. 1, 5, 8</h3>
+<ul>
+  <li><b>Ej. 1</b>: 1 servidor, 1 IP y 1 puerto alcanzan (la 4-upla distingue las conexiones). Escalar es un tema de capacidad, no de puertos.</li>
+  <li><b>Ej. 5 (DNS ↔ HTTP)</b>: casi todo pedido HTTP a un host nuevo arranca con una consulta DNS, así que su latencia se suma.
+    <ul>
+      <li><i>DNS centralizado</i>: cuello de botella, punto único de falla y servidor lejano para la mayoría → más latencia en <b>cada</b> HTTP.</li>
+      <li><i>Sin caché</i>: cada pedido recorre raíz → TLD → autoritativo (varios RTTs extra) y la raíz se satura.</li>
+      <li><i>Orientado a conexión</i>: un handshake extra por consulta (1 RTT más). Para 1 pregunta y 1 respuesta, UDP alcanza.</li>
+      <li>Con SMTP vale el mismo razonamiento, porque el saliente necesita MX + A. Pero el mail es asincrónico y tolera demora, así que el impacto <b>percibido</b> es mucho menor.</li>
+    </ul></li>
+  <li><b>Ej. 8 (MIME)</b>: se agregan headers (MIME-Version, Content-Type, Content-Transfer-Encoding) y todo se codifica a ASCII (base64). SMTP y los servidores transportan texto sin interpretarlo, así que no cambian. Solo los <b>user agents</b> tienen que entender MIME.</li>
+</ul>
+
+<h3><span class="tag">B</span> dig y registros — ej. 2</h3>
+<p><span class="f">dig nombre TIPO</span> muestra <span class="f">nombre TTL IN TIPO valor</span>. Con <span class="f">+trace</span> resuelve paso a paso desde la raíz (raíz → ar → uba.ar → dc.uba.ar). <b>Autoritativos</b> = los que figuran en los registros NS de la zona. <b>Primario</b> = el primer nombre del SOA; el resto de los NS son <b>secundarios</b>. La raíz y <span class="f">ar</span> no tienen A ni MX: solo delegan.</p>
+
+<h3><span class="tag">C</span> Escribir requests — ej. 3 y 9</h3>
+<pre>GET / HTTP/1.1                    HEAD /tdc HTTP/1.1              GET /logo.jpg HTTP/1.1
+Host: www.dc.uba.ar               Host: www.dc.uba.ar             Host: www.dc.uba.ar
+                                                                  If-Modified-Since: Mon, 05 Oct 2026 12:00:00 GMT</pre>
+<p>Ej. 9 (conferencia): el <b>POST</b> lleva el contenido en el cuerpo, con <span class="f">Content-Type: application/pdf</span> (o el que corresponda, o <span class="f">multipart/form-data</span>) y <span class="f">Content-Length</span>, y el servidor responde <span class="f">201 Created</span> + <span class="f">Location: /recursos/42</span>. El <b>GET</b> de <span class="f">/recursos/42</span> responde 200 con ese Content-Type y el cuerpo. El <b>HEAD</b> responde 200 con los mismos headers (Content-Type = el tipo pedido) y <b>sin cuerpo</b>.</p>
+
+<h3><span class="tag">D</span> Contar RTTs de una página — ej. 6</h3>
+<ol>
+  <li>Listá los objetos que se bajan <b>automáticamente</b> (HTML base + img, css, script, input image, iframe). Descartá &lt;a&gt; y &lt;form&gt;.</li>
+  <li>Aplicá la tabla de la sección 4: <b>1.0</b> = 2 RTT por objeto; <b>1.1 sin pipelining</b> = 2 + 1 por objeto; <b>1.1 con pipelining</b> = 2 + 1.</li>
+  <li>Escribí los supuestos: secuencial o paralelo, DNS ya resuelto o no (si no, +1 RTT al resolver por cada host nuevo), y que cada archivo entra en 1 RTT (el enunciado lo dice).</li>
+</ol>
+
+<h3><span class="tag">E</span> Secuencia DNS con caché — ej. 7 (y la parte DNS del 4, 10, 11)</h3>
+<p>Para cada consulta anotá: <b>quién pregunta → a quién</b>, si es <b>recursiva o iterativa</b>, qué responde (<b>aa</b> o referral con NS + glue) y <b>qué queda en caché</b>. Reglas:</p>
+<ul>
+  <li>El cliente le pregunta <b>recursivamente</b> al resolver, y el resolver pregunta <b>iterativamente</b> empezando por el ancestro más cercano que tenga en caché (si no tiene nada, por la raíz).</li>
+  <li>Mail para un dominio → <b>MX</b> del dominio y después el <b>A</b> del servidor MX (si no vino en ADDITIONAL).</li>
+  <li>Un <b>CNAME</b> obliga a seguir resolviendo el nombre canónico (puede caer en otra zona → más consultas).</li>
+  <li>Se cachea todo lo recibido: answer, NS de AUTHORITY y glue de ADDITIONAL. Una segunda consulta a la misma zona va directo a su autoritativo.</li>
+</ul>
+<p>Ej. 7: con <span class="f">servidores.uba.ar</span> ya en caché, la consulta <span class="f">uba.ar MX?</span> va directo y vuelve aa: MX <span class="f">mailserver.uba.ar</span> + su A (208.25.19.2) en ADDITIONAL. Para <span class="f">milagros.dc.uba.ar</span> el resolver le pregunta a <span class="f">servidores.uba.ar</span>, que responde con un <b>referral</b> (NS <span class="f">servidores.dc.uba.ar</span> + glue A 208.190.1.4); después le pregunta a ese y obtiene aa: A 208.190.1.15.</p>
+
+<h3><span class="tag">F</span> Integradores — ej. 4, 10, 11, 12 (los más "de parcial")</h3>
+<p>Recorré la historia y, para <b>cada host nuevo que aparece</b>, aplicá la cadena <b>DNS → TCP → protocolo de aplicación</b>. El checklist:</p>
+<ol>
+  <li><b>Actores</b>: PC/UA, resolver, proxy, servidor web, servidor de webmail, SMTP saliente, MX destino, servidor POP3/IMAP, servidores de terceros (CDN, ads, trackers).</li>
+  <li><b>DNS</b> (UDP, resolver): un <b>A</b> por cada hostname distinto. <b>MX + A</b> para cada dominio de destino de mail (lo pide el <b>servidor saliente</b>, no la PC). Seguí los <b>CNAME</b>. Con caché vacía, recorré la jerarquía. Si los registros están en caché, no hay consulta.</li>
+  <li><b>TCP</b>: una conexión por par cliente-servidor (en 1.0, una por objeto). Contalas cuando lo pidan.</li>
+  <li><b>Aplicación</b>:
+    <ul>
+      <li>HTTP: un GET por el HTML y uno por cada objeto embebido; cada <span class="f">&lt;iframe&gt;</span> es otra página con su propio GET.</li>
+      <li>SMTP: UA → saliente y saliente → MX, con la sesión HELO…QUIT.</li>
+      <li>POP3/IMAP para leer.</li>
+      <li>Webmail: el navegador habla HTTP y el servidor habla SMTP.</li>
+    </ul></li>
+  <li><b>Proxy</b>: la PC le hace todo el HTTP al proxy (y solo resuelve el proxy). Es el proxy el que resuelve y se conecta a los servidores de origen (si hay miss).</li>
+</ol>
+<ul>
+  <li><b>Ej. 4 (UDP)</b>: usan UDP solo la PC ↔ resolver y el resolver ↔ los name servers (DNS). Todo lo demás (HTTP, SMTP) va por TCP. Las conexiones TCP son: PC ↔ www.smn.gov.ar (una o varias, según la versión de HTTP y los objetos), UA ↔ SMTP saliente, y saliente ↔ MX de dc.uba.ar (esta última la desencadena el usuario, pero no la abre su PC).</li>
+  <li><b>Ej. 10 (spam)</b>: las consultas DNS son el A del SMTP saliente (en caché) y después, <b>por cada dominio distinto</b> de destinatario, su MX + A: uba.ar, dc.uba.ar, dm.uba.ar, df.uba.ar. Ojo: bob@uba.ar y alice@uba.ar comparten el MX, así que va una sola consulta. Para <b>mostrar</b> el mail, el UA del receptor hace GET de <span class="f">ofertas.png</span> (www…) y del <b>tracker</b> <span class="f">count.php?CampaignID=…&amp;Email=…</span> (la imagen de 10×10, que <b>delata que abriste el mail</b>). El link de unsubscribe <b>no</b> se pide hasta que hacés clic.</li>
+  <li><b>Ej. 11 (jmail)</b>: <span class="f">www.jmail.com</span> → A; <span class="f">cdn.akamai.com</span> → <b>CNAME</b> a <span class="f">recursos.jmail.com</span> → A (hay que seguirlo); el <span class="f">&lt;iframe src="http://ads.spameitor.com"&gt;</span> es otro dominio, así que lleva su DNS, su conexión y su página. El botón y el texto no generan pedidos. Contá las conexiones TCP por servidor distinto.</li>
+  <li><b>Ej. 12</b>: PC ↔ proxy (<b>HTTPS</b>, con CONNECT/túnel), proxy ↔ webmail (HTTPS), webmail ↔ SMTP saliente (SMTP), SMTP saliente ↔ servidor de mail destino (SMTP), PC destino ↔ servidor de mail (<b>POP3</b>). <b>El MX</b> del dominio destino lo consulta el <b>servidor SMTP saliente</b> cuando va a reenviar el mail, no la PC ni el webmail.</li>
+</ul>
+
+<div class="box"><b>Para escribir en el parcial:</b> numerá los mensajes y aclará <b>desde qué dispositivo</b> sale cada uno (lo piden explícitamente: "aclarar de qué dispositivo se envía cada mensaje"). Indicá recursiva/iterativa y autoritativa/no. Escribí los supuestos: qué hay en caché, HTTP 1.0 o 1.1, conexiones paralelas o no.</div>
+
+</body>
+</html>

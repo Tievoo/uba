@@ -63,7 +63,33 @@ Tabla: RTT | CWND | se envía = min(CWND, RWND, falta) | ¿≥ umbral? | SSTHRES
 ---
 
 ## Aplicación (Guía 6)
-_pendiente_
+_(en progreso: ej. 1–5 hechos)_
+
+### Base
+- Orden siempre: nombre → **DNS (UDP 53)** → IP → **TCP** (1 RTT handshake) → protocolo app. Integradores = aplicar esto a **cada host nuevo**.
+- Puertos: HTTP 80 · HTTPS 443 · SMTP 25 (587 submission) · POP3 110 · IMAP 143 · DNS 53/UDP.
+- ★ 1 servidor/1 IP/1 puerto alcanzan para N clientes: TCP distingue por la **4-upla** (IPc, puertoc, IPs, puertos); el cliente usa puerto efímero. Escalar = capacidad (LB / varios A en DNS), no puertos.
+- DNS round robin (varios A) vs balanceador: DNS reparte grueso (TTL/caché, no detecta caídas); LB fino + health checks, pero punto único.
+
+### DNS
+- ★ **Stub resolver** en la PC (no resuelve nada) → consulta **recursiva** → **resolver** (servidor: ISP, 8.8.8.8) → consultas **iterativas** raíz → TLD → … → autoritativo. El cliente no "está en una zona".
+- ★ El resolver arranca del **ancestro más cercano en su caché** (si no, raíz). Caché solo ayuda si comparten ancestro (.ar no sirve para .com). **Cada resolver tiene su caché** (no se comparten).
+- Registros `nombre TTL IN tipo valor`: A/AAAA (IP) · CNAME (alias, seguir cadena; ★ un nombre con CNAME no tiene otros registros; apex no puede ser CNAME) · MX (prioridad, menor = mejor) · NS · SOA · PTR.
+- ★ **NS**: (1) en la zona padre = **delegación** (referral "preguntale a…"); (2) en la zona = lista de autoritativos (aa). Varios por redundancia. Dominio con DNS en otro gestor ⇒ cargar sus NS en el registrar (va a la zona padre). "Propagación" = TTL de NS viejos.
+- ★ **Glue**: A del NS en la zona padre cuando el NS está **dentro** de la zona delegada (si no, circular). Va en ADDITIONAL.
+- **Primario** = primer nombre del SOA; resto de los NS = secundarios (copian si sube el **serial**). SOA: serial, refresh, retry, expire, minimum (= TTL caché negativa).
+- Respuesta autoritativa (aa, de primario/secundario) vs no autoritativa (caché). Secciones: ANSWER / AUTHORITY (NS) / ADDITIONAL (A extra).
+- TTL + cambio de IP: resolvers con caché siguen dando la IP vieja hasta que vence el TTL.
+- DNS centralizado / sin caché / con conexión ⇒ cuello de botella + punto de falla, varios RTT extra por host, +1 RTT handshake. Afecta cada HTTP; SMTP menos (asincrónico, encola).
+
+### Mail
+- ★ **Servidor saliente** = SMTP de **tu proveedor** (configurado en el cliente: Gmail → smtp.gmail.com:587). Te autentica, encola y reintenta. ≠ entrante/MX (del **destinatario**) ≠ POP3/IMAP (donde leés).
+- ★ El **MX lo busca el saliente** (con **su** resolver), no la PC. La PC solo resuelve el A de su saliente.
+- Cadena: UA ─SMTP→ saliente ─(DNS MX+A)─SMTP→ MX destino → buzón ─POP3/IMAP→ UA. Webmail: navegador ─HTTP(S)→ webmail, que hace SMTP por dentro.
+- MX hoy sería un SRV/SVCB genérico; existe porque el mail va a otra máquina que la web (dc.uba.ar: web UBA, mail Google).
+
+### HTTP
+- ★ Request 1.1: `MÉTODO ruta HTTP/1.1` + **Host obligatorio** (virtual hosting) + línea en blanco. HEAD = headers sin cuerpo. GET condicional `If-Modified-Since` → **304** si no cambió.
 
 ## Seguridad (Guía 7)
 _pendiente_
