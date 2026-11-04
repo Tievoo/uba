@@ -62,9 +62,69 @@ El costo es que el controlador es un punto único de falla. Se mitiga replicánd
 ### 2. Multi-tier
 
 ## Ej 8 — Sensores en un edificio de 5 pisos (WiFi + Bluetooth)
+> **Overlay network:** red **lógica** montada sobre la física. Define quién considera vecino a quién a nivel aplicación; un enlace lógico puede ser varios saltos físicos. **AP** = access point (el "router WiFi").
+
+**Supuestos:**
+- El Bluetooth tiene **alcance corto** (~10 m): un sensor llega a los de su piso y a los del piso **adyacente** (2↔3, 3↔4), no a pisos más lejanos. Si solo llegara al mismo piso, los pisos 2–4 quedarían aislados y no habría solución.
+- Algún sensor del **piso 1 tiene WiFi y Bluetooth**: es el **gateway** entre los dos mundos.
+
 ### 1. Overlay
+
+**Overlay jerárquica con super peers:**
+- **Pisos 0 y 1:** los sensores se conectan por WiFi al **AP**, que es el super peer raíz.
+- **Pisos 2, 3 y 4:** cada piso tiene un **super peer**. Los sensores del piso son sus **hijos** (Bluetooth dentro del piso).
+- **Columna vertical:** los super peers se encadenan por Bluetooth entre pisos adyacentes, hasta el gateway del piso 1 que lo pasa al AP.
+
+```
+          SP4 ── sensores piso 4
+           │  (BT)
+          SP3 ── sensores piso 3
+           │  (BT)
+          SP2 ── sensores piso 2
+           │  (BT)
+  gateway piso 1 (BT + WiFi)
+           │  (WiFi)
+          AP  ── sensores pisos 0 y 1 (WiFi)
+```
+
+**Punto débil:** es una **cadena**. Si cae el SP del piso 3, el piso 4 queda aislado. Se mitiga con más de un nodo puente por piso o eligiendo otro super peer cuando uno cae.
+
 ### 2. Intercambio de mensajes
+
+Es un **pull por el árbol, con agregación de vuelta**:
+1. El **AP** inicia el `pedido(id)`: lo manda a sus hijos WiFi y, por el gateway, a SP2.
+2. Cada **super peer**, **en paralelo**:
+   - reenvía el pedido a sus hijos del piso;
+   - reenvía el pedido al super peer del piso de arriba.
+3. Cada sensor responde a su super peer con sus datos.
+4. Cada super peer espera las respuestas de sus hijos y el acumulado del piso de arriba, con un **timeout T**, y baja **un solo mensaje agregado**: los datos de su piso más los de los pisos superiores.
+5. El AP termina con la información de toda la red.
+
+Detalles:
+- **En paralelo:** el tiempo total depende de la altura de la cadena, no de la suma de todo.
+- **Timeout:** si un piso no contesta, se baja el resultado parcial marcando "sin respuesta del piso k". Una caída no bloquea todo.
+- **Agregación:** ahorra mensajes en el Bluetooth, que es lento.
+- **Alternativa push:** cada super peer empuja periódicamente sus datos hacia abajo. Da menos latencia al consultar, a cambio de tráfico constante.
+
 ### 3. Flooding / random walk vs anillo
+
+El objetivo es **recuperar la información de toda la red**.
+
+| | Flooding | Random walk | Anillo |
+|---|---|---|---|
+| **Cómo** | reenvía a **todos** los vecinos (TTL y descarte de duplicados) | reenvía a **un** vecino al azar | cada nodo conoce a su sucesor; el pedido da una vuelta juntando datos |
+| **Mensajes** | muchísimos duplicados: `R(k)=d(d−1)^(k−1)` por salto | pocos | **exactamente N** |
+| **¿Llega a todos?** | sí | **no garantizado** | sí, determinístico |
+| **Latencia** | baja (avanza en paralelo) | alta | orden N (secuencial) |
+| **Estructura** | ninguna: usa los vecinos físicos | ninguna | hay que mantenerla en altas y bajas |
+| **Ante fallas** | muy robusto (otros caminos) | robusto | se corta la vuelta; se mitiga con una lista de sucesores |
+
+**En esta red:**
+- **Flooding** gasta mucha batería y Bluetooth en duplicados, pero no hay que mantener nada.
+- **Random walk** sirve para *encontrar* algo, no para *juntar todo*: es la peor opción para este objetivo.
+- **Anillo:** si el orden lógico no sigue la física, un salto lógico (por ejemplo, de piso 0 a piso 4) son varios saltos Bluetooth. Conviene armarlo **siguiendo los pisos**, y así queda casi la misma cadena del inciso 1.
+
+**Conclusión:** para recolectar todo, anillo o jerarquía ganan en mensajes; flooding gana en robustez y simplicidad.
 
 ## Ej 9 — tar.gz de 1 TB en 100 servidores
 ### 1. Flooding
