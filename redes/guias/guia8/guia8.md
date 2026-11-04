@@ -132,3 +132,41 @@ El objetivo es **recuperar la información de toda la red**.
 ### 3. Super peer
 
 ## Ej 10 — Aeropuerto con vehículos autónomos (cloud / fog / edge)
+
+**Predio propuesto:** dos terminales (A y B), un estacionamiento de larga estadía y un hotel, unidos por ~3 km de calles internas. Hay APs WiFi cada ~100 m sobre las calles, con celdas que se solapan para el handoff. El data center está en el edificio central del aeropuerto. Los servidores regionales están en Internet, fuera del predio.
+
+**Regla para ubicar:** cuanto más crítica la latencia, más cerca del auto. Cuanto más global la vista que necesita, más lejos.
+
+```
+ CLOUD   [Servidores Internet] ◀── varios aeropuertos de la región
+             ▲ batch, agregado/anonimizado (Internet)
+ FOG     [Data center del aeropuerto]   mapa global + historial
+             ▲ ▼ estado de celda / plan global (red del predio)
+ EDGE    [AP 1] ◀─handoff─▶ [AP 2] ◀─handoff─▶ [AP 3]   orquestación local
+          ▲ ▼ WiFi           ▲ ▼
+ DEVICE  [Auto] ◀──V2V──▶ [Auto]                control en tiempo real
+```
+
+| Componente | Capa | Procesamiento | Datos | Interfaces | Por qué ahí |
+|---|---|---|---|---|---|
+| **Vehículo** | edge (dispositivo) | control de movimiento en tiempo real: sensores, frenado, evitar obstáculos, seguir la ruta asignada | estado propio (posición, velocidad, batería), ruta actual, mapa local cacheado | → AP: `publicarEstado(id, pos, vel, bat)` periódico · ← AP: `orden(ruta / velocidad / stop)` · ↔ autos: `beacon(id, pos, vel, intención)` · pasajero: `pedirDestino()` | **latencia** de ms para frenar y **autonomía**: si se cae el WiFi, frena o sigue seguro solo |
+| **Access point** | edge / fog cercano | orquesta los autos de **su celda**: prioridades en intersecciones, distancias, velocidad; handoff al AP vecino; agrega los estados | estado de los autos en su celda (soft state, se reconstruye), cola de cada intersección | ↔ autos: recibe estado, manda órdenes · ↔ AP vecino: `handoff(auto, estado)` · → DC: `resumenCelda(estados)` · ← DC: `planGlobal(rutas)` | latencia de decenas de ms; **ancho de banda**: no sube cada lectura al DC, solo resúmenes |
+| **Data center del aeropuerto** | fog (on-premise) | mapa global en tiempo real, asignación de viajes (pasajero → auto), rutas globales, balanceo entre zonas, anonimización antes de exportar | mapa completo **distribuido** (particionado por zonas y replicado), historial de recorridos | ← APs: estados de celda · → APs: planes · ← apps y kioscos: `pedirViaje(origen, destino)` · → cloud: `exportarLote(datos agregados)` | **autonomía**: el aeropuerto sigue funcionando sin Internet; **regulación**: los datos de pasajeros no salen crudos |
+| **Servidores en Internet** | cloud | análisis regional, comparación entre aeropuertos, entrenamiento de modelos, reportes para las compañías | históricos agregados de muchos aeropuertos | ← DC: `recibirLote(aeropuerto, datos)` · → compañías: API REST de consulta · → DC: `actualizarModelo()` | no hay latencia crítica; necesita **vista global** y mucho cómputo y almacenamiento |
+
+**Niveles lógicos:**
+
+| Nivel | Dónde vive |
+|---|---|
+| UI | la pantalla del pasajero en el auto, apps y kioscos, dashboards de las compañías |
+| Procesamiento | el control en el auto, la orquestación local en el AP, la planificación global en el DC, la analítica en el cloud |
+| Datos | soft state en auto y AP, mapa e historial en el DC, históricos regionales en el cloud |
+
+**¿Cómo se comunican los autos entre sí?** Por **V2V directo** (WiFi ad hoc / WiFi Direct, o C-V2X), **sin pasar por el AP**:
+- Cada auto hace **broadcast** periódico (~100 ms) de un beacon con su posición, velocidad e intención (doblo, freno).
+- Los autos en rango lo reciben y ajustan la velocidad.
+
+Es comunicación **event-based**: el emisor no conoce a los receptores. Va directo porque evitar un choque no puede esperar el ida y vuelta al AP, ni depender de que el AP esté vivo o el auto esté en medio de un handoff. Queda una división de responsabilidades:
+- **Seguridad inmediata:** sensores propios del auto + V2V.
+- **Coordinación fina** (quién pasa primero en una intersección): el AP.
+- **Planificación** (qué auto busca a qué pasajero): el DC.

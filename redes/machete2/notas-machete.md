@@ -63,7 +63,6 @@ Tabla: RTT | CWND | se envía = min(CWND, RWND, falta) | ¿≥ umbral? | SSTHRES
 ---
 
 ## Aplicación (Guía 6)
-_(en progreso: ej. 1–5 hechos)_
 
 ### Base
 - Orden siempre: nombre → **DNS (UDP 53)** → IP → **TCP** (1 RTT handshake) → protocolo app. Integradores = aplicar esto a **cada host nuevo**.
@@ -90,9 +89,113 @@ _(en progreso: ej. 1–5 hechos)_
 
 ### HTTP
 - ★ Request 1.1: `MÉTODO ruta HTTP/1.1` + **Host obligatorio** (virtual hosting) + línea en blanco. HEAD = headers sin cuerpo. GET condicional `If-Modified-Since` → **304** si no cambió.
+- Respuesta: `HTTP/1.1 código texto` + `Content-Type` (tipo MIME) + `Content-Length` + línea en blanco + cuerpo. POST de un upload → **201 Created** + `Location`.
+- **RTTs por página** (ej. 6): cada objeto = 1 RTT handshake + 1 RTT GET. 1.0 no persistente: 2·n · 1.1 persistente sin pipelining: 2 + (n−1) · con pipelining: 2 + 1 = **3**. Embebidos recién después de parsear el HTML.
+- ★ **Qué se descarga solo**: `<img src>`, `<link rel=stylesheet>`, `<script src>`, `<iframe src>` (otra página HTML ⇒ sus propios recursos), `<input type=image>`. **No**: `<a href>` (clic), `<form action>` (submit).
+- ★ **Una conexión TCP por host** distinto (cada uno con su DNS previo). DNS = UDP, no cuenta como conexión TCP.
+- Pixel de rastreo: `<img>` a `count.php?Email=...` ⇒ el servidor registra la apertura. `Content-Type` lo decide el servidor, no la extensión.
+
+### MIME (mail vs HTTP)
+- Mail: SMTP es ASCII 7 bits ⇒ binario en **base64**. Headers `MIME-Version`, `Content-Type` (qué es), `Content-Transfer-Encoding` (cómo está codificado). SMTP no se entera, decodifica el cliente.
+- HTTP reusa los **tipos** MIME en `Content-Type`, pero el cuerpo va binario tal cual (sin base64 ni CTE).
+
+### DNS: secuencias (ej. 7, 11)
+- Tabla: # | de → a | consulta (recursiva/iterativa) | respuesta (referral NS+glue / aa A). PC→resolver recursiva; resolver→raíz→TLD→auth iterativas.
+- Lo cacheado se reusa: la 2ª resolución en .com arranca del NS de com (salta la raíz).
+- ★ **Zone file**: nombre sin punto final = relativo a la zona (`ads` en jmail.com = `ads.jmail.com`; `cdn.akamai.com` sin punto = `cdn.akamai.com.jmail.com`). Un servidor **no autoritativo** para un dominio no se consulta por él ⇒ esos registros no se usan.
+- Mail masivo (ej. 10): **una consulta MX por dominio distinto**, no por destinatario. El A del MX suele venir en ADDITIONAL.
 
 ## Seguridad (Guía 7)
-_pendiente_
+
+### Propiedades
+Confidencialidad (solo B lee) · Integridad (no se modificó) · Autenticación (es A) · **No repudio** (A no puede negar; necesita algo que **solo A** pudo generar ⇒ firma con privada). No repudio ⇒ autenticación, no al revés. ★ **MAC no da no repudio** (B también tiene la clave).
+
+### ★ Regla de claves
+- **Mi privada** = probar que soy yo (firmar). **Pública del otro** = que solo él lea (cifrar).
+- Simétrica (AES): rápida, problema = distribuir la clave (N(N−1)/2 claves). Asimétrica (RSA): lenta, resuelve distribución ⇒ en la práctica: **asimétrica para autenticar + acordar una simétrica de sesión**, después todo simétrico (híbrido).
+
+### ★ Firma + cifrado (ej. 2)
+- Firma: `F = E_{K−A}(H(M))`. Envío: `C = E_{K+B}(M + F)` (solo viaja C).
+- B: (1) descifra C con K−B → M, F; (2) descifra F con K+A → digest; (3) calcula H(M) y **compara**. ★ El hash **no se invierte**, se recalcula.
+
+### ★ MITM y certificados (ej. 3)
+- Sin certificado: el atacante cambia las públicas en el intercambio y descifra/recifra en el medio.
+- **Certificado X.509** = (sujeto, **clave pública del sujeto**, emisor, validez, nº de serie, algoritmos) + **firma de la CA**. Verificar: firma con **K+CA** (preinstalada en el SO/navegador = raíz de confianza), validez/fechas, nombre = el que quiero, no revocado (CRL/OCSP).
+- Cadena: raíz → intermedia → servidor.
+
+### Challenge-response y replay
+- A manda un **nonce** fresco; B lo firma con K−B; A verifica con K+B ⇒ B tiene la privada. ★ Replay: reusar un mensaje viejo válido ⇒ meter nonce/timestamp **dentro** de lo firmado. Reflexión: devolverle el mismo desafío al que lo emitió.
+
+### ★ SSH (ej. 5) y dónde vive cada clave
+| | Cliente | Servidor |
+|---|---|---|
+| Clientes con claves (a) | su privada | N públicas en `authorized_keys` |
+| Servidor (b) | K+S en `known_hosts` (1ª vez: fingerprint/**TOFU**, débil) | su privada |
+| Con CA (c) | su par + Cert_C + **K+CA** | su par + Cert_S + **K+CA** |
+- Con CA no se guardan públicas ajenas: el cert del otro llega en el handshake y se valida con K+CA ("una sola pública: la de la CA"). Revocar ⇒ CRL.
+
+### ★ TLS 1.2 (ej. 4)
+| Fase | Mensajes |
+|---|---|
+| HELLO | ClientHello (versión, cipher suites, **R_C**) · ServerHello (elige suite, **R_S**) |
+| Key exchange | Certificate (Cert_S) · [CertificateRequest] · ServerHelloDone · ClientKeyExchange (**PMS cifrado con K+S**) · ChangeCipherSpec · Finished |
+| Data | todo simétrico + MAC |
+- `master = PRF(PMS, "master secret", R_C + R_S)`. Los **nonces R** hacen cada sesión distinta ⇒ anti-replay. Finished = MAC de todo el handshake (detecta manipulación).
+- **TLS mutuo**: el servidor manda CertificateRequest; el cliente manda Certificate + **CertificateVerify** (firma del handshake con su privada). ★ Autenticar empleados con certs ⇒ TLS mutuo con la CA de la empresa (no user/pass).
+- Capas: TLS sobre TCP (app); IPsec en red; WPA en enlace.
+
+### Blockchain (teórica)
+- Problema: **doble gasto** sin autoridad central. Ledger replicado de bloques; cada bloque lleva **hash del anterior** (cadena ⇒ cambiar uno rompe todos los siguientes) + raíz de **Merkle** de las transacciones (probar inclusión en O(log n)).
+- **PoW**: encontrar nonce con H(bloque) < target (caro de hacer, barato de verificar). Cadena más larga (más trabajo) gana. **Ataque 51%**: con mayoría de cómputo reescribís historia. Confirmación ≈ esperar k bloques.
+- PoS: peso por stake. BFT (permisionado): n ≥ 3f+1.
+- Transacciones firmadas con la privada del dueño (dirección = hash de la pública).
 
 ## Arquitecturas (Guía 8)
-_pendiente_
+
+### ★ Receta para ejercicios de diseño (ej. 1, 2, 4)
+1. Supuestos. 2. Diagrama: cajas (componentes) + flechas (conectores).
+3. **Por componente**: interfaz (operaciones) · procesamiento ("recibe X → hace Y → emite Z"; si lo saco, ¿qué decisión deja de pasar?) · datos · nivel (UI / procesamiento / datos).
+4. **Por conector**: protocolo (REST, RPC, pub/sub, BD compartida) + acoplamiento. 5. Justificar cada decisión.
+
+### Estilos y acoplamiento
+- Estilos: **en capas** (cada capa usa la de abajo) · **objetos/servicios** (REST: recursos + verbos HTTP, stateless) · **pub/sub** (event-based) · **shared data space**.
+- ★ Matriz: referencial = ¿el emisor conoce al receptor? · temporal = ¿tienen que estar vivos a la vez?
+
+| | Temporal acoplado | Temporal desacoplado |
+|---|---|---|
+| **Ref. acoplado** | directa (RPC, HTTP) | mailbox / cola |
+| **Ref. desacoplado** | event-based (pub/sub) | shared data space (BD, tuplas) |
+- Pub/sub: por **topic** o por **contenido** (atributo-valor / atributo-rango; ★ el publicador manda **valores**, el **suscriptor** pone el rango; el middleware filtra). Notificar con dato vs aviso + ir a buscarlo. Lease en suscripciones.
+- ★ Condición que combina dos eventos (A **y** B) ⇒ el middleware no la evalúa: alguien guarda estado ⇒ **controlador** que se suscribe, decide y publica comandos (regla en un solo lugar, actuadores tontos; costo: punto único ⇒ replicar). Suscribirse a **todo** el rango para enterarse también del "apagar" (ej. 4).
+
+### Middleware: wrappers vs broker (ej. 5)
+- Wrapper = adaptador de interfaz. Reemplazar C y D por E ⇒ 2 wrappers.
+- N apps todos contra todos: **N(N−1)** wrappers. Con **broker**: **2N** (cada app ↔ formato común). Broker mejor desde N ≥ 4; agregar una app = O(1). Costo: punto central de falla / cuello.
+
+### Cliente-servidor / físicas
+- ★ **Idempotencia** (ej. 6): se pierde el OK sobre UDP ⇒ el cliente reintenta ⇒ **transferencia doble**. Solución: **ID de transacción** (el servidor detecta duplicado y re-responde). TCP no lo resuelve (la caída puede ser después de procesar y antes de responder: es de aplicación).
+- Organizaciones 2-tier (a)→(e): corte entre UI / app / datos, de **thin** client (solo pantalla) a **fat** client (app + parte de datos local).
+- ★ Validación (ej. 7): en el **cliente** (UX, menos viajes) **y** en el **servidor** (seguridad: el cliente se puede saltear). Multi-tier: UI / servidor de app / BD.
+- Distribución **vertical** (por capas en distintas máquinas) vs **horizontal** (réplicas / particiones del mismo nivel).
+
+### P2P
+- **Overlay** = red lógica sobre la física (quién es vecino lógico de quién; un enlace lógico = varios saltos físicos).
+- **Estructurado** (DHT, Chord: anillo + finger table, búsqueda **O(log N)**, hay que mantenerlo) vs **no estructurado** (vecinos al azar): **flooding** (a todos, TTL, `R(k)=d(d−1)^(k−1)` msgs en el salto k; rápido, robusto, carísimo) / **random walk** (a un vecino al azar, `S ≈ N/r` pasos con r réplicas; barato, lento, **no garantiza cubrir todo**). **Super peers**: jerarquía, índice central por grupo (punto débil si cae).
+- ★ Ej. 8 (sensores 5 pisos): supuestos (BT llega al piso adyacente; un nodo del piso 1 con WiFi+BT = **gateway**) ⇒ overlay jerárquica: super peer por piso encadenados → AP. Recolección: pedido por el árbol **en paralelo** + **timeout** + **agregación** de vuelta. Anillo = N msgs exactos pero O(N) latencia; armarlo siguiendo la física.
+- Ej. 9 (1 TB, 10000 piezas, 100 servidores, 10 vecinos): `T_pieza = (2h + 2)·RTT/2 + Ttx` con h = saltos de búsqueda. Clase (100 ms + 1 Gbps): flooding ≈ 3,5 h · RW ≈ 8,3 h · super peer ≈ 3,3 h. Guía: RTT 200 ms (mismo modelo).
+
+### ★ Cloud / Fog / Edge (ej. 10)
+- Latencias aprox: dispositivo ~0 · edge (AP / antena) 1–10 ms · fog (DC local) 10–50 ms · cloud 50–200 ms.
+- **4 motivos para acercar al borde**: **latencia** (control en tiempo real) · **ancho de banda** (agregar/filtrar antes de subir) · **autonomía** (seguir sin Internet) · **regulación / privacidad** (datos no salen). Cloud = **vista global**, cómputo/almacenamiento masivo, sin latencia crítica.
+- Tabla: componente | capa | procesa | datos | interfaces | por qué ahí. Autos/dispositivos entre sí: **directo (V2V broadcast)**, sin esperar al AP.
+- Orquestación: decidir dónde corre cada servicio y moverlo (handoff entre celdas).
+
+## Teórica sin guía (cómputo distribuido)
+- **Amdahl**: speedup = 1 / ((1−p) + p/n) ⇒ la parte serial limita.
+- **8 falacias**: red confiable, latencia 0, BW infinito, red segura, topología fija, un administrador, costo de transporte 0, red homogénea.
+- **Dos generales**: sin acuerdo garantizado sobre canal no confiable. **FLP**: asincrónico + 1 falla ⇒ no hay consenso determinístico garantizado. **CAP**: ante partición (P) elegir C o A. **PACELC**: si P → A o C; si no (Else) → Latencia o Consistencia.
+- Replicación SMR (máquina de estados replicada: mismo orden de operaciones ⇒ mismo estado). Tolerar f fallas: crash **n ≥ 2f+1**, bizantinas **n ≥ 3f+1**. Quórums: **R + W > N** (lectura y escritura se solapan), W > N/2.
+- Consistencia (fuerte → débil): linealizable > secuencial > causal > eventual.
+- **Lamport**: (1) evento local: C++; (2) enviar: C++ y adjuntar C; (3) recibir: C = max(C, C_msg) + 1. a → b ⇒ C(a) < C(b), **no al revés** (concurrentes pueden tener cualquier orden). Orden total: desempatar por id de proceso.
+- **Vectoriales**: V[i]++ local; al recibir, máximo componente a componente + V[i]++. a → b ⇔ V(a) < V(b) (todas ≤ y una <); si ninguno ≤ ⇒ **concurrentes**. Sí capturan causalidad.
+- **TrueTime** (Spanner): `TT.now()` = intervalo [earliest, latest], ancho 2ε; ε ≈ 1 ms + deriva 0,2 ms/s desde la última sincronización (GPS + relojes atómicos), ~1–7 ms. **Commit wait**: timestamp s = TT.now().latest, esperar hasta TT.after(s) (≈ 2ε) antes de hacer visible ⇒ **consistencia externa** (si T1 termina antes de que empiece T2, s1 < s2).
