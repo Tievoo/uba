@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Resumen Teórico</title>
+<style>
+  @page { size: A4; margin: 14mm 14mm; }
+  :root { --ink:#1b1b1b; --muted:#555; --accent:#1f6fb2; --warn:#b3261e; --box:#f3f6fa; --line:#d6dde6; }
+  body { font-family: "Segoe UI", Arial, sans-serif; font-size: 10.5pt; line-height: 1.38; color: var(--ink); background:#fff; margin:0; }
+  h1 { font-size: 18pt; margin: 0 0 2px; }
+  .sub { color: var(--muted); margin: 0 0 12px; }
+  h2 { font-size: 13pt; color: var(--accent); border-bottom: 2px solid var(--accent); padding-bottom: 2px; margin: 18px 0 8px; break-after: avoid; }
+  h3 { font-size: 11pt; margin: 12px 0 4px; break-after: avoid; }
+  p { margin: 4px 0 6px; }
+  ul, ol { margin: 4px 0 6px; padding-left: 18px; }
+  li { margin: 2px 0; }
+  code, .f, pre { font-family: Consolas, "Courier New", monospace; font-size: 9.4pt; }
+  pre { background:#f6f6f6; border:1px solid var(--line); padding:6px 8px; margin:6px 0; white-space: pre-wrap; break-inside: avoid; }
+  .box { background: var(--box); border-left: 4px solid var(--accent); padding: 6px 10px; margin: 8px 0; break-inside: avoid; }
+  .warn { background: #fdf1f0; border-left: 4px solid var(--warn); padding: 6px 10px; margin: 8px 0; break-inside: avoid; }
+  table { border-collapse: collapse; width: 100%; margin: 6px 0 8px; break-inside: avoid; }
+  th, td { border: 1px solid var(--line); padding: 3px 6px; text-align: left; vertical-align: top; }
+  th { background: #e8eef5; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+</style>
+</head>
+<body>
+
+<h1>Resumen teórico — 2do parcial Redes (RCCD 2C 2026)</h1>
+<p class="sub">Teóricas 12 (Congestión), 13 (Aplicación), 14 (Seguridad + Blockchain), 15 (Cómputo distribuido, Cloud/Fog/Edge), 15.1 (Lamport) y 15.2 (TrueTime). Pensado para la pregunta teórica: definiciones, por qués y trade-offs. ★ = lo más preguntable.</p>
+
+<div class="box"><b>Cómo contestar una pregunta teórica:</b> (1) definir el concepto en una línea, (2) decir qué problema resuelve, (3) dar el trade-off o la limitación, (4) un ejemplo concreto. Casi todo en esta materia es "X resuelve Y, a cambio de Z".</div>
+
+<!-- ============================================================ -->
+<h2>1. Congestión (teórica 12)</h2>
+
+<ul>
+  <li><b>Congestión</b> = sobrecarga <b>sostenida</b>: la demanda supera la capacidad de algún recurso (enlace, buffer) ⇒ se degrada la QoS. Síntomas: <b>pérdidas</b> y <b>delay creciente</b>.</li>
+  <li>★ <b>Control de flujo vs control de congestión</b>: flujo protege al <b>receptor</b> (punto a punto, RWND la anuncia el receptor); congestión protege a la <b>red</b> (global, CWND la estima el emisor). Se envía <span class="f">min(CWND, RWND)</span>.</li>
+  <li><b>Knee</b> (codo): el throughput deja de crecer y el delay se dispara. <b>Cliff</b> (precipicio): colapso, goodput → 0. Potencia = throughput / delay, máxima cerca del knee. Evitar congestión = operar en el knee; controlarla = no caerse del cliff.</li>
+  <li><b>Por qué no alcanzan los arreglos obvios</b>: buffers infinitos ⇒ el delay crece hasta que vencen los timeouts ⇒ duplicados ⇒ más carga. Ruteo solo reparte (y si mira la carga, oscila). Más BW solo corre el problema.</li>
+  <li><b>Taxonomía</b>: lazo abierto (prealocar, circuitos) vs lazo cerrado: <b>implícito</b> (TCP infiere por pérdidas/delay) o <b>explícito</b> (ECN, DECbit, ATM ABR: la red avisa).</li>
+  <li><b>FIFO + Drop Tail</b>: el que llega con la cola llena se tira ⇒ todos los flujos pierden a la vez ⇒ <b>sincronización global</b> (todos bajan y suben juntos).</li>
+  <li>★ <b>RED</b> (Random Early Detection): promedio exponencial de la cola; por debajo de MinTh encola, entre MinTh y MaxTh descarta con probabilidad creciente (hasta MaxP ≈ 0,02), arriba de MaxTh descarta todo. Avisa temprano a flujos al azar ⇒ evita sincronización global y mantiene la cola corta.</li>
+  <li>★ <b>AIMD</b> (aumento aditivo, decremento multiplicativo): Chiu-Jain muestra que converge a <b>eficiencia y equidad</b>. Cortar a la mitad = vaciar la cola rápido + ser conservador.</li>
+  <li><b>Equidad de Jain</b>: <span class="f">f = (Σx)² / (n·Σx²)</span>, entre 1/n (uno se lleva todo) y 1 (todos iguales).</li>
+  <li><b>M/M/1</b>: ρ = λ/μ &lt; 1; <span class="f">E[T] = 1/(μ − λ)</span> → ∞ cuando ρ → 1: el delay explota antes de llegar al 100 % de uso.</li>
+  <li><b>Mathis</b>: <span class="f">BW ≈ (MSS/RTT) · √(3/2) / √p</span> ⇒ TCP penaliza RTT largos y pérdidas (WiFi: pierde por errores de bit, no por congestión, y TCP lo malinterpreta).</li>
+  <li>Slow start es "slow" comparado con TCP pre-1988, que mandaba toda la ventana de entrada.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2>2. Aplicación (teórica 13)</h2>
+
+<h3>Base</h3>
+<ul>
+  <li>Protocolo de aplicación define: <b>tipos</b> de mensaje (petición/respuesta), <b>sintaxis</b> (campos), <b>semántica</b> (qué significan), <b>reglas</b> (cuándo y cómo se envían). Abiertos (RFC: HTTP, SMTP) o propietarios.</li>
+  <li>Un proceso se identifica por <b>IP + puerto</b> (la IP sola no alcanza: muchos procesos por host). El socket es la "puerta" entre la app y el transporte del SO.</li>
+  <li><b>Cliente</b> habla primero; <b>servidor</b> espera en un puerto conocido.</li>
+</ul>
+
+<h3>★ ¿TCP o UDP? Requisitos de la aplicación</h3>
+<table>
+  <tr><th>App</th><th>Pérdidas</th><th>Ancho de banda</th><th>Sensible al delay</th><th>Transporte</th></tr>
+  <tr><td>Archivos, mail, web</td><td>no tolera</td><td>flexible</td><td>no</td><td>TCP</td></tr>
+  <tr><td>Audio/video en tiempo real</td><td>tolera</td><td>mínimo (kbps–Mbps)</td><td>sí, ~100 ms</td><td>típicamente UDP (RTP, SIP)</td></tr>
+  <tr><td>Video almacenado</td><td>tolera</td><td>mínimo</td><td>pocos segundos</td><td>TCP (HTTP: DASH)</td></tr>
+  <tr><td>Juegos interactivos</td><td>tolera</td><td>pocos kbps</td><td>sí, ~100 ms</td><td>UDP o TCP</td></tr>
+</table>
+<ul>
+  <li>TCP da: conexión, confiabilidad, control de flujo y de congestión. <b>No</b> da temporización ni BW mínimo. UDP no da nada de eso (pero no agrega handshake ni retransmisiones que lleguen tarde).</li>
+  <li><b>DASH</b> (MPEG-DASH): video en segmentos por HTTP, cada uno en varias calidades; el cliente elige el bitrate según el BW medido ⇒ streaming adaptativo sobre TCP.</li>
+</ul>
+
+<h3>DNS</h3>
+<ul>
+  <li>Base de datos <b>distribuida y jerárquica</b> (raíz → TLD → dominios → subdominios), escalable por delegación de <b>zonas</b> y caché. La app llama al resolvedor (<span class="f">gethostbyname</span>), que manda UDP al servidor local.</li>
+  <li>Registro = (nombre, TTL, clase, tipo, valor). SOA: primario, mail del admin, serial, timers.</li>
+  <li>Consultas <b>recursivas</b> (resolvé vos todo) vs <b>iterativas</b> (decime a quién preguntar). Respuestas <b>autoritativas</b> (del dueño de la zona) vs <b>no autoritativas</b> (de caché).</li>
+  <li>TLDs ~1500+, ccTLD ~300+; administra ICANN.</li>
+</ul>
+
+<h3>Mail</h3>
+<ul>
+  <li>Tres componentes: <b>agentes de usuario</b>, <b>servidores de correo</b> (buzón + cola de salida), <b>SMTP</b> entre servidores.</li>
+  <li>SMTP: TCP puerto 25, transferencia <b>directa</b> servidor → servidor, tres fases (saludo, transferencia, cierre), comandos ASCII + respuestas con código. Mensajes en ASCII 7 bits.</li>
+  <li>Comandos: <span class="f">HELO · MAIL FROM · RCPT TO · DATA · (cuerpo terminado en ".") · QUIT</span>. Respuestas 250 OK, 354 empezá el cuerpo, 221 cierre.</li>
+  <li>Formato RFC 822: cabecera (To, From, Subject) + línea en blanco + cuerpo ASCII. <b>MIME</b> agrega <span class="f">MIME-Version</span>, <span class="f">Content-Type</span> (tipo/subtipo) y <span class="f">Content-Transfer-Encoding</span> (base64) para binarios.</li>
+  <li>Leer el buzón: <b>POP3</b> (baja y suele borrar) vs <b>IMAP</b> (los mensajes quedan en el servidor, carpetas, sincroniza varios dispositivos).</li>
+</ul>
+
+<h3>HTTP</h3>
+<ul>
+  <li>Página = HTML base + objetos referenciados, cada uno con su URL (host + ruta). Cliente/servidor sobre TCP puerto 80.</li>
+  <li>★ <b>Sin estado</b>: el servidor no recuerda peticiones previas. Por qué: los protocolos con estado son complicados (si uno se cae, los estados quedan inconsistentes y hay que recomponerlos). El estado se agrega <b>afuera</b>: cookies, autorización en cada pedido.</li>
+  <li>Métodos: GET, POST, HEAD (solo cabeceras, para validar). 1.1 agrega PUT (subir a esa URL) y DELETE.</li>
+  <li>Códigos: 200 OK · 301 Moved Permanently (+ Location) · 400 Bad Request · 404 Not Found · 505 Version Not Supported. (También 201 Created, 304 Not Modified, 401 Unauthorized.)</li>
+  <li>Tiempo de respuesta de un objeto = <b>2 RTT + transmisión</b> (1 RTT handshake TCP + 1 RTT pedido/primeros bytes).</li>
+  <li>★ <b>No persistente</b> (1.0): un objeto por conexión ⇒ 2 RTT por objeto + recursos del SO por conexión (los navegadores abren conexiones en paralelo). <b>Persistente</b> (1.1): la conexión queda abierta; <b>sin pipelining</b> 1 RTT por objeto; <b>con pipelining</b> 1 RTT para todos los referenciados.</li>
+  <li><b>Autorización</b>: como no hay estado, las credenciales van en cada pedido (<span class="f">Authorization:</span>); sin ellas el servidor responde <b>401</b> + <span class="f">WWW-Authenticate</span>.</li>
+  <li>★ <b>Cookies</b>, 4 componentes: (1) <span class="f">Set-Cookie</span> en la respuesta, (2) <span class="f">Cookie</span> en los pedidos siguientes, (3) archivo de cookies en el host del usuario (lo maneja el navegador), (4) base de datos en el sitio indexada por ese ID. Dan estado (carrito, sesión) sobre un protocolo sin estado; costo: privacidad/rastreo.</li>
+</ul>
+
+<h3>★ CDN</h3>
+<ul>
+  <li>Red de servidores que cachean el contenido de los proveedores <b>dentro o cerca de los ISPs</b>, para que el cliente lo baje localmente (clave para video: latencia y BW).</li>
+  <li>El usuario se reparte por <b>redirección DNS</b>: el DNS de la CDN devuelve la IP del servidor más cercano (geográficamente o en latencia) según desde dónde pregunta el resolver.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2>3. Seguridad (teórica 14)</h2>
+
+<h3>★ Propiedades (preguntar siempre: ¿cuáles provee esta tecnología?)</h3>
+<table>
+  <tr><th>Propiedad</th><th>Qué garantiza</th></tr>
+  <tr><td>Confidencialidad</td><td>solo las partes especificadas entienden el mensaje</td></tr>
+  <tr><td>Integridad</td><td>no se modificó en tránsito</td></tr>
+  <tr><td>Originalidad</td><td>no es una copia repetida (anti-replay)</td></tr>
+  <tr><td>Temporalidad</td><td>no fue demorado maliciosamente</td></tr>
+  <tr><td>Autenticación</td><td>nadie asume la identidad de otro</td></tr>
+  <tr><td>Control de acceso (autorización)</td><td>solo ciertos usuarios hacen ciertas acciones</td></tr>
+  <tr><td>Disponibilidad</td><td>todo usuario tiene su oportunidad de ser atendido (contra DoS)</td></tr>
+  <tr><td>No repudio</td><td>nadie puede negar haber participado</td></tr>
+</table>
+
+<h3>Seguridad por capa</h3>
+<ul>
+  <li>Aplicación: SSH, PGP · Transporte: SSL/TLS · Red: <b>IPsec</b> · Enlace: WEP, WPA, WPA2.</li>
+  <li>IPsec: <b>AH</b> (Authentication Header) da integridad, autenticación y no repudio (no cifra); <b>ESP</b> (Encapsulating Security Payload) da <b>confidencialidad</b>.</li>
+</ul>
+
+<h3>Criptografía clásica</h3>
+<ul>
+  <li>Plaintext → algoritmo parametrizado por una <b>clave</b> → ciphertext. Se asume un intruso pasivo que copia todo el ciphertext. Criptografía + criptoanálisis = criptología. <b>Cifrado</b> (carácter a carácter / bit a bit) ≠ <b>código</b> (reemplaza palabras: Navajo).</li>
+  <li><b>Sustitución</b> (enmascara, preserva el orden): César (rotación fija), monoalfabética (26! ≈ 4·10²⁶ claves, pero se rompe por <b>estadística de frecuencias</b> del idioma), polialfabética (un alfabeto por letra). <b>Transposición</b> (reordena sin enmascarar): clave sin letras repetidas (MEGABUCK) numera columnas; se escribe por filas y se lee por columnas.</li>
+  <li>★ <b>Kerckhoffs</b>: el algoritmo es público, solo la clave es secreta. La "seguridad por oscuridad" nunca funciona.</li>
+  <li><b>Factor de trabajo</b>: crece <b>exponencialmente</b> con el largo de la clave. 64 bits = juguete; 128/256 comercial; ≥ 256 crítico.</li>
+  <li><b>One-time pad</b>: clave aleatoria tan larga como el mensaje + XOR ⇒ <b>inviolable</b> (Shannon, teoría de la información). Problema: distribuir y proteger la clave ⇒ impráctico. Criptografía cuántica (BB84) apunta a distribuir claves así.</li>
+</ul>
+
+<h3>Simétrica</h3>
+<ul>
+  <li><span class="f">C = E_K(P)</span>, <span class="f">P = D_K(C)</span> ⇒ <span class="f">P = D_K(E_K(P))</span>. Misma clave en los dos extremos.</li>
+  <li><b>Cifrado de bloque</b>: bloque de n bits → n bits, con sustitución + permutación iteradas. <b>DES</b> (IBM 1977): bloques de 64 bits, 16 rondas con subclaves K1..K16 derivadas de una clave; quedó corto de clave (fuerza bruta). <b>3DES</b>: <span class="f">C = E_K3(D_K2(E_K1(P)))</span>. <b>AES</b> = el mínimo recomendado hoy.</li>
+  <li>★ Problema: ¿cómo acordar la clave con alguien que nunca viste? ⇒ asimétrica o un KDC.</li>
+</ul>
+
+<h3>Asimétrica (clave pública)</h3>
+<ul>
+  <li>Diffie-Hellman 1976, RSA 1978. Pública (cifrar, la conoce todo el mundo) y privada (descifrar, solo el dueño). Requisito: inviable derivar la privada de la pública o de pares plaintext/ciphertext.</li>
+  <li>★ <b>RSA</b>: (1) primos grandes p, q; (2) <span class="f">n = p·q</span>, <span class="f">z = (p−1)(q−1)</span>; (3) e &lt; n coprimo con z; (4) d con <span class="f">e·d mod z = 1</span>; (5) pública (n, e), privada (n, d). Cifrar <span class="f">c = mᵉ mod n</span>, descifrar <span class="f">m = cᵈ mod n</span>. Seguridad: factorizar n es costoso. Ejemplo de clase: p=3, q=11 ⇒ n=33, z=20, e=3, d=7.</li>
+  <li>★ Propiedad clave: <span class="f">K⁻(K⁺(m)) = m = K⁺(K⁻(m))</span>. Pública primero = confidencialidad; <b>privada primero = firma</b>.</li>
+  <li>Asimétrica es <b>cara</b> ⇒ en la práctica, asimétrica para autenticar y acordar una clave de sesión simétrica (TLS).</li>
+</ul>
+
+<h3>★ Firma digital y hash</h3>
+<ul>
+  <li>Firmar = cifrar con la <b>privada</b>: solo el dueño pudo producir <span class="f">K⁻_B(m)</span> ⇒ autenticidad, integridad y <b>no repudio</b>.</li>
+  <li>Cifrar el mensaje entero con RSA es caro ⇒ se firma el <b>digest</b>: <span class="f">K⁻_B(H(m))</span>. Verificar: recalcular H(m) y comparar con <span class="f">K⁺_B(firma)</span>.</li>
+  <li>Hash: muchos a uno, salida de tamaño fijo, rápido. Propiedades: <b>preimagen</b> (dado y, inviable hallar x con H(x)=y), <b>segunda preimagen</b> (dado x, inviable hallar otro x′ con el mismo hash), <b>colisiones</b> (inviable hallar cualquier par). Efecto avalancha.</li>
+  <li>MD5 (128 bits) y SHA-1 (160 bits): con colisiones encontradas. SHA-2 (256/512) vigente.</li>
+</ul>
+
+<h3>★ Autenticación con clave compartida (challenge-response)</h3>
+<ol>
+  <li>A → B: "soy A". 2. B → A: <span class="f">R_B</span> (nonce aleatorio, en claro). 3. A → B: <span class="f">K_AB(R_B)</span> ⇒ B sabe que es A. 4. A → B: <span class="f">R_A</span>. 5. B → A: <span class="f">K_AB(R_A)</span> ⇒ A sabe que es B. Opcional: A manda una clave de sesión cifrada con K_AB.</li>
+</ol>
+<ul>
+  <li>El nonce aleatorio y largo (128 bits) hace improbable reusar una respuesta vieja (<b>anti-replay</b>).</li>
+  <li>Versión simplificada (3 mensajes: identidad + challenge juntos) ⇒ vulnerable al <b>ataque por sesiones (reflexión)</b>: T se hace pasar por A, recibe R_B, abre una <b>segunda sesión</b> mandándole a B su propio R_B como challenge, B lo cifra, y T usa esa respuesta en la primera sesión.</li>
+  <li><b>Reglas de diseño</b>: el que inicia prueba su identidad primero · claves distintas por dirección (K_AB y K′_AB) · challenges de conjuntos distintos (pares/impares) · resistir sesiones paralelas.</li>
+  <li><b>KDC</b> (Key Distribution Center): cada uno comparte una clave solo con el KDC. A → KDC: <span class="f">A, K_A(B, K_S)</span>; KDC → B: <span class="f">K_B(A, K_S)</span>. Resuelve las N² claves, pero el KDC es punto central de confianza y falla.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2>4. Blockchain (teórica 14, 2da parte)</h2>
+
+<div class="box"><b>Idea central:</b> registro <b>append-only</b>, <b>replicado</b> entre nodos que <b>no confían entre sí</b>, que acuerdan un <b>único orden</b> sin autoridad central. Hash → integridad · firmas → autoría · <b>consenso → orden</b> (lo nuevo).</div>
+<ul>
+  <li>★ <b>Qué no da la firma</b>: orden (cuál fue primero), unicidad (que no haya otro mensaje firmado que lo contradiga), acuerdo (que todos vean el mismo historial). ⇒ <b>Doble gasto</b>: Alice firma tx₁ (moneda #42 → Bob) y tx₂ (#42 → Carol); las dos firmas verifican, la criptografía no decide cuál vale. Solución clásica: un tercero (banco).</li>
+  <li><b>Encadenar por hash</b>: cada bloque lleva <span class="f">prev = H(bloque anterior)</span>. Alterar una tx del bloque 41 cambia su hash ⇒ el prev del 42 no coincide ⇒ toda la cadena posterior queda inválida.</li>
+  <li><b>Árbol de Merkle</b>: la raíz (32 bytes) va en el header; cambiar cualquier tx cambia la raíz. Probar que una tx está incluida: <b>log₂(n) hashes</b> ⇒ clientes livianos (SPV) sin bajar el bloque.</li>
+  <li><b>Transacciones</b>: dirección = hash(clave pública), sin registro de usuarios. Gastar = referenciar salidas previas no gastadas (UTXO) y firmar con la privada (ECDSA/Schnorr). Cada nodo verifica la firma y que la salida exista y no esté gastada. "La firma responde quién; el consenso, cuál primero."</li>
+  <li>★ <b>Consenso en red abierta</b>: generales bizantinos (Lamport-Shostak-Pease 1982) exigen <b>n ≥ 3f + 1</b> con identidades <b>conocidas</b>. En una red abierta, crear identidades es gratis ⇒ <b>ataque Sybil</b> ("un nodo, un voto" no sirve). Nakamoto 2008: votar con un recurso <b>escaso y verificable</b> (cómputo).</li>
+  <li>★ <b>Proof of Work</b>: buscar nonce con <span class="f">SHA256(SHA256(header)) &lt; target</span>. Caro de producir, <b>barato de verificar</b> (un hash). Dificultad ajustada cada 2016 bloques para ~10 min/bloque. Gana la cadena con <b>más trabajo acumulado</b>; minar es una lotería proporcional al cómputo.</li>
+  <li><b>Confirmaciones</b>: si el atacante tiene q &lt; 50 % del cómputo, su chance de alcanzar a los honestos cae <b>exponencialmente</b> con z bloques de ventaja (paseo aleatorio). Con q ≥ 50 % gana siempre (<b>ataque del 51 %</b>). "6 confirmaciones (~1 h)" es convención, no teorema.</li>
+  <li><b>Mirada de redes</b>: difusión por <b>gossip</b> (nadie ve la red completa); <b>forks transitorios</b> cuando dos mineros encuentran bloque casi a la vez (el de la rama perdedora queda huérfano). Bloques más rápidos ⇒ más forks y trabajo perdido (Bitcoin ~7 tx/s).</li>
+</ul>
+<table>
+  <tr><th></th><th>Proof of Work</th><th>Proof of Stake</th><th>BFT (PBFT)</th></tr>
+  <tr><td>Recurso escaso</td><td>cómputo (energía)</td><td>capital en garantía</td><td>identidad conocida</td></tr>
+  <tr><td>Red</td><td>abierta</td><td>abierta</td><td>permisionada</td></tr>
+  <tr><td>Finalidad</td><td>probabilística</td><td>económica (checkpoints)</td><td>inmediata</td></tr>
+  <tr><td>Tolera</td><td>&lt; 50 % del cómputo</td><td>&lt; 1/3 del stake</td><td>f &lt; n/3 nodos</td></tr>
+  <tr><td>Ejemplo</td><td>Bitcoin</td><td>Ethereum (desde 2022)</td><td>CometBFT (Cosmos)</td></tr>
+</table>
+<ul>
+  <li>PoS: el validador que hace trampa pierde su garantía (<b>slashing</b>).</li>
+  <li><b>Ethereum</b> = máquina de estados replicada (<span class="f">estado_{n+1} = δ(estado_n, txs)</span>) entre nodos que no se conocen. Smart contracts (código + estado en la cadena, todos lo ejecutan en la EVM); <b>gas</b> acota el cómputo y corta loops infinitos; bugs inmutables (The DAO 2016).</li>
+  <li>★ <b>¿Cuándo conviene?</b> Muchos escriben y no confían entre sí + no hay un tercero aceptable para todos + historial verificable públicamente. Si hay un tercero confiable, una <b>base de datos replicada</b> es más simple, rápida y barata.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2>5. Cómputo distribuido: de la nube al edge (teórica 15)</h2>
+
+<div class="box"><b>Tesis de la clase:</b> cloud, edge y fog no son productos sino respuestas distintas a las mismas preguntas: dónde está el estado, cómo se replica, qué se sacrifica ante una partición y cuánto cuesta coordinar. Las restricciones no cambian; cambia <b>dónde se ubica el cómputo</b> respecto de datos y usuarios.</div>
+
+<h3>Qué es un sistema distribuido</h3>
+<ul>
+  <li>Lamport: "aquel en el que la falla de una computadora que ni sabías que existía deja inutilizable la tuya". Tanenbaum: computadoras independientes que se presentan como un único sistema coherente.</li>
+  <li>★ <b>Tres rasgos</b> (Coulouris): <b>concurrencia</b> (carreras, hay que coordinar) · <b>sin reloj global</b> (cada reloj deriva, no hay "ahora" único) · <b>fallas independientes</b> (algo falla y el resto sigue; a veces nadie sabe que falló). Comunicación <b>solo por mensajes</b>: lo que un nodo sabe del otro puede estar desactualizado.</li>
+  <li><b>Por qué distribuir</b>: escalar, tolerar fallas (redundancia), localidad (cerca de usuarios/datos), costo (muchas máquinas comunes). Escalar vertical tiene techo; horizontal no, pero exige coordinar.</li>
+  <li>★ <b>Amdahl</b>: <span class="f">S(n) = 1 / ((1 − p) + p/n)</span>, con n → ∞ <span class="f">S → 1/(1 − p)</span>. Con p = 0,95: S(8) = 5,9 · S(64) = 15,4 · S(1024) = 19,6 ⇒ un 5 % secuencial (coordinación, lock, consenso) limita a <b>20×</b>. Gustafson: si el problema crece con n, mejora.</li>
+</ul>
+
+<h3>★ Modelos de sistema (todo algoritmo es correcto <i>respecto de un modelo</i>)</h3>
+<table>
+  <tr><th>Tiempo</th><th>Fallas de procesos</th><th>Canales</th></tr>
+  <tr><td><b>Síncrono</b>: cotas conocidas<br><b>Parcialmente síncrono</b>: cotas existen pero no se conocen, o valen desde algún momento<br><b>Asíncrono</b>: sin cotas</td>
+      <td><b>Crash</b>: se detiene y no vuelve<br><b>Crash-recovery</b>: vuelve con estado persistente<br><b>Bizantina</b>: arbitraria, incluso maliciosa</td>
+      <td><b>Confiables</b>: todo llega una vez<br><b>Pérdidas equitativas</b>: si reintentás, llega<br><b>Arbitrarios</b>: pérdida, duplicación, reorden</td></tr>
+</table>
+
+<h3>Las 8 falacias (Deutsch, Gosling)</h3>
+<p>La red es confiable · la latencia es cero · el ancho de banda es infinito · la red es segura · la topología no cambia · hay un solo administrador · el costo de transporte es cero · la red es homogénea. Las tres primeras son las que más cuestan (<b>una llamada remota no es una llamada local</b>); en el edge las ocho son todavía más falsas.</p>
+
+<h3>★ Resultados de imposibilidad</h3>
+<table>
+  <tr><th>Resultado</th><th>Dice</th></tr>
+  <tr><td><b>Dos Generales</b> (1975/78)</td><td>con un canal que puede perder mensajes, ningún protocolo garantiza que dos procesos acuerden actuar juntos: siempre falta "el último ACK"</td></tr>
+  <tr><td><b>FLP</b> (1985)</td><td>en un sistema <b>asíncrono</b>, ningún algoritmo <b>determinista</b> de consenso termina siempre si puede fallar <b>un solo</b> proceso por crash</td></tr>
+  <tr><td><b>CAP</b> (Brewer 2000, prueba 2002)</td><td>ante una <b>partición</b>, un sistema replicado elige entre <b>consistencia</b> (linealizabilidad) y <b>disponibilidad</b></td></tr>
+  <tr><td><b>PACELC</b> (Abadi 2012)</td><td>si hay Partición: A o C; si no (Else): <b>Latencia o Consistencia</b>. La partición es rara; la latencia, permanente</td></tr>
+</table>
+<p>Cómo se vive con esto: aleatoriedad, timeouts (sincronía parcial), detectores de falla, y elegir explícitamente qué sacrificar.</p>
+
+<h3>★ Replicar estado</h3>
+<ul>
+  <li><b>Máquina de estados replicada</b> (Lamport 1978, Schneider 1990): mismos comandos en el mismo orden ⇒ mismo estado. El problema se reduce a <b>acordar el orden del log</b> = consenso (líder ordena, seguidores aplican).</li>
+  <li>Réplicas para tolerar f fallas: <b>crash n ≥ 2f + 1</b> (Paxos, Raft) · <b>bizantina n ≥ 3f + 1</b> (PBFT). Por qué: dos mayorías cualesquiera se intersectan ⇒ siempre hay un testigo de la última decisión.</li>
+  <li><b>Quórums</b>: N réplicas, escribir en W, leer de R: <b>R + W &gt; N</b> ⇒ toda lectura ve la última escritura. N=3, W=2, R=2 tolera una caída. Bajar R o W compra latencia a cambio de consistencia (PACELC).</li>
+</ul>
+
+<h3>★ Espectro de consistencia (de fuerte a débil)</h3>
+<table>
+  <tr><th>Modelo</th><th>Qué garantiza</th><th>Costo</th><th>Ejemplo</th></tr>
+  <tr><td>Linealizable</td><td>cada operación parece instantánea en un punto entre su inicio y su fin</td><td>consenso en cada escritura</td><td>Spanner, etcd</td></tr>
+  <tr><td>Secuencial</td><td>un orden total común, compatible con el de cada proceso</td><td>orden total</td><td>memoria multiprocesador idealizada</td></tr>
+  <tr><td>Causal</td><td>si a pudo influir en b, todos ven a antes que b</td><td>metadatos causales</td><td>COPS, chats, redes sociales</td></tr>
+  <tr><td>Eventual</td><td>si cesan las escrituras, las réplicas convergen</td><td>ninguna coordinación síncrona</td><td>DNS, Dynamo, CRDTs</td></tr>
+</table>
+<p>Hacia abajo: menos coordinación, menos latencia, más disponibilidad ante particiones, y más trabajo para el programador (conflictos, reconciliación).</p>
+
+<h3>El péndulo centralizar ↔ distribuir</h3>
+<p>Mainframe (C, 60–70) → cliente-servidor (D, 80s) → clusters/grid (D, 90s) → nube pública S3/EC2 (C, 2006) → edge/fog (D, 2009–14) → continuo dispositivo–edge–nube (2020s). ★ Lo mueve la relación entre <b>costo de computar, costo de comunicar y latencia tolerable</b>: red barata y rápida ⇒ centralizar; datos o latencia pesan más ⇒ distribuir.</p>
+
+<h3>La nube como sistema distribuido</h3>
+<ul>
+  <li><b>Las fallas son la norma</b>: 10 000 servidores con MTBF de 30 años ⇒ 10 000 / (30 × 365) ≈ <b>0,9 fallas por día</b>. Replicar, reintentar y detectar no es opcional.</li>
+  <li><b>La latencia de cola domina</b>: fan-out a 100 servidores, cada uno lento el 1 % ⇒ <span class="f">1 − 0,99¹⁰⁰ ≈ 63 %</span> de los pedidos son lentos. El p99 de cada nodo es la mediana del sistema.</li>
+  <li><b>Llevar el cómputo a los datos</b>: MapReduce (el sistema reparte, reintenta y lanza copias de las tareas lentas). "El datacenter es la computadora."</li>
+  <li>Piezas: configuración (etcd, Chubby) = consenso y elección de líder; bases globales (Spanner) vs clave-valor (Dynamo) = linealizabilidad vs disponibilidad.</li>
+</ul>
+
+<h3>★ Edge y fog</h3>
+<ul>
+  <li>La velocidad de la luz limita: en fibra ≈ 200 000 km/s ⇒ <b>1 ms de RTT ≈ 100 km</b>. Desde Buenos Aires: São Paulo ≥ 17 ms, Virginia ≥ 84 ms.</li>
+  <li><b>Cuatro motivos</b> para acercar el cómputo: <b>latencia</b> (control, AR, vehículos necesitan 1–20 ms) · <b>volumen</b> (1000 cámaras × 4 Mb/s = 4 Gb/s que no conviene subir) · <b>autonomía</b> (seguir operando si se corta la nube) · <b>soberanía</b> (datos que por ley o privacidad no salen).</li>
+</ul>
+<table>
+  <tr><th>Nivel</th><th>Cantidad</th><th>Latencia</th></tr>
+  <tr><td>Nube</td><td>decenas de regiones</td><td>50–150 ms</td></tr>
+  <tr><td>Fog / edge regional</td><td>cientos a miles de sitios</td><td>5–20 ms</td></tr>
+  <tr><td>Edge de acceso</td><td>decenas de miles</td><td>1–5 ms</td></tr>
+  <tr><td>Dispositivos</td><td>miles de millones</td><td>&lt; 1 ms</td></tr>
+</table>
+<ul>
+  <li><b>Fog</b> = la jerarquía completa y la cooperación entre niveles (Cisco 2012). <b>Edge</b> = el borde de la red de acceso. <b>Cloudlet</b> = "datacenter en una caja" cerca del usuario (2009).</li>
+  <li>Problemas nuevos del continuo: <b>placement</b> (asignar tareas a nodos con capacidad acotada minimizando latencia: NP-difícil ⇒ heurísticas) · <b>migración con movilidad</b> (el estado sigue al usuario; migrar en vivo converge si la tasa de escritura &lt; la de copia) · <b>consistencia entre niveles</b> (fuerte = latencia de nube; eventual = conflictos ⇒ el edge opera abajo en el espectro) · <b>autonomía ante particiones</b> (opera aislado y reconcilia; <b>CRDTs</b> convergen sin coordinar, relojes híbridos ordenan sin sincronía perfecta).</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2>6. Relojes de Lamport y vectoriales (15.1)</h2>
+
+<ul>
+  <li>★ <b>"Ocurrió antes" (a → b)</b>: a y b en el mismo proceso con a primero; o a es el envío y b la recepción del mismo mensaje; o por transitividad. Si ni a → b ni b → a: <b>concurrentes</b> (ninguno pudo influir en el otro).</li>
+  <li>★ <b>Tres reglas</b> (un contador C por proceso): (1) antes de cada evento local o envío, <span class="f">C := C + 1</span>; (2) el mensaje lleva <span class="f">t = C</span>; (3) al recibir con marca t, <span class="f">C := max(C, t) + 1</span>. El max asegura que la recepción quede después del envío aunque el receptor viniera atrasado.</li>
+  <li>★ Garantía: <b>a → b ⇒ C(a) &lt; C(b)</b>. La recíproca <b>no</b> vale. Orden total: desempatar por id de proceso, (C, p).</li>
+</ul>
+<pre>p1:  a(1) ──m1──▶ p2        b(2) ──m2──▶ p3
+p2:  c(1)   d(2)   e = max(2, 1) + 1 = 3     (gana el reloj local)
+p3:                f = max(0, 2) + 1 = 3     (gana la marca del mensaje)</pre>
+<table>
+  <tr><th>Evento</th><th>a</th><th>b</th><th>c</th><th>d</th><th>e</th><th>f</th></tr>
+  <tr><td>Lamport</td><td>1</td><td>2</td><td>1</td><td>2</td><td>3</td><td>3</td></tr>
+  <tr><td>Vectorial (p1,p2,p3)</td><td>(1,0,0)</td><td>(2,0,0)</td><td>(0,1,0)</td><td>(0,2,0)</td><td>(1,3,0)</td><td>(2,0,1)</td></tr>
+</table>
+<ul>
+  <li>C(c) = 1 &lt; C(b) = 2 pero <b>c y b son concurrentes</b>: Lamport no lo detecta.</li>
+  <li><b>Vectoriales</b> (Fidge, Mattern 1988): cada proceso cuenta los eventos de todos; al recibir, <b>máximo componente a componente</b> y +1 en la propia. <b>a → b ⇔ V(a) &lt; V(b)</b> (todas ≤ y alguna &lt;). c = (0,1,0) y b = (2,0,0) no son comparables ⇒ concurrentes. Costo: n enteros por mensaje.</li>
+  <li><b>Relojes físicos derivan</b>: cristal de 20 ppm ⇒ 20·10⁻⁶ × 86 400 s ≈ <b>1,7 s por día</b>. NTP: milisegundos en Internet; PTP: microsegundos en LAN. Nunca cero.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2>7. TrueTime de Spanner (15.2)</h2>
+
+<div class="box"><b>Idea:</b> ningún reloj sabe la hora exacta. TrueTime no lo oculta: devuelve un <b>intervalo</b> que garantiza contener la hora real, y cada commit <b>espera</b> hasta que la incertidumbre haya pasado. Convierte <b>incertidumbre en latencia</b>.</div>
+<ul>
+  <li>API: <span class="f">TT.now()</span> → [earliest, latest], ancho 2ε · <span class="f">TT.after(t)</span>: t ya pasó seguro (t &lt; now().earliest) · <span class="f">TT.before(t)</span>: t no llegó seguro (t &gt; now().latest).</li>
+  <li>Spanner asume deriva de <b>200 µs/s</b> (10× peor que un cristal, por seguridad) y sincroniza cada <b>30 s</b> con time masters (GPS + relojes atómicos).</li>
+  <li>★ <span class="f">ε = 1 ms + 0,2 ms/s × Δt</span> (Δt desde la última sincronización). Ejemplo: Δt = 15 s ⇒ ε = 4 ms, intervalo de 8 ms. ε entre ~1 y 7 ms.</li>
+  <li>★ <b>Commit wait</b>: elegir <span class="f">s = TT.now().latest</span>; no liberar locks ni responder hasta que <span class="f">TT.after(s)</span>. Cuesta ≈ <b>2ε</b> por commit (en parte se superpone con la ronda de Paxos).</li>
+  <li>★ <b>Consistencia externa</b>: si T1 hace commit en el nodo A y recién después (en tiempo real) arranca T2 en el nodo B, entonces <b>s₁ &lt; s₂</b>, para cualquier error de reloj dentro de ±ε. Peor caso (A adelantado ε, B atrasado ε): s₁ ≤ r₁ + 2ε, A confirma recién en r₁ + 2ε, T2 arranca después ⇒ s₂ ≥ r₂ &gt; s₁.</li>
+  <li>★ <b>vs Lamport</b>: Lamport ordena compatible con la causalidad que <b>viaja en mensajes</b>. TrueTime ordena también eventos <b>sin mensajes entre sí</b> (T1 y T2 relacionadas solo por un cliente externo) porque ancla los timestamps a la hora real.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2>8. Preguntas tipo teórica (autoevaluación)</h2>
+<ol>
+  <li>¿Por qué una firma digital no alcanza para evitar el doble gasto? ¿Qué agrega blockchain?</li>
+  <li>¿Por qué PoW resiste un ataque Sybil y "un nodo, un voto" no? ¿Qué pasa con 51 %?</li>
+  <li>¿Cuándo <b>no</b> conviene una blockchain?</li>
+  <li>¿Qué propiedades da AH vs ESP? ¿Una firma da confidencialidad?</li>
+  <li>Kerckhoffs y por qué la longitud de la clave importa. ¿Por qué el one-time pad no se usa?</li>
+  <li>Explicar el ataque por reflexión y dos reglas de diseño que lo evitan.</li>
+  <li>Si a → b, ¿qué se puede decir de C(a) y C(b)? ¿Y si C(a) &lt; C(b)? ¿Cómo lo resuelven los vectoriales?</li>
+  <li>¿Qué es el commit wait, cuánto cuesta y qué garantiza que Lamport no?</li>
+  <li>CAP vs PACELC: ¿por qué PACELC dice que la latencia importa más?</li>
+  <li>¿Cuántas réplicas para tolerar f crashes? ¿Y f bizantinos? ¿Por qué R + W &gt; N?</li>
+  <li>Dar 3 motivos para hacer cómputo en el edge en vez de la nube, con un ejemplo cada uno.</li>
+  <li>Amdahl con p = 0,9: ¿cuál es el speedup máximo? (10×)</li>
+  <li>¿Por qué HTTP es sin estado y cómo se agrega estado? ¿Cómo reparte usuarios una CDN?</li>
+  <li>Control de flujo vs control de congestión. ¿Por qué RED evita la sincronización global?</li>
+</ol>
+
+</body>
+</html>
