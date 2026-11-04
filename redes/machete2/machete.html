@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><title>Machete Redes 2</title>
+<style>
+@page{size:/*PAGE*/210mm 297mm/*END*/;margin:4mm}
+:root{--fs:/*FS*/6.2pt/*END*/}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Arial Narrow",Arial,sans-serif;font-size:var(--fs);line-height:1.13;color:#000;background:#fff}
+.cols{column-count:4;column-gap:1.6mm;column-rule:.2pt solid #999}
+h1{font-size:1.25em;margin:0 0 .3mm;padding:.2mm .6mm;background:#000;color:#fff;break-after:avoid}
+h2{font-size:1.1em;margin:.8mm 0 .2mm;padding:.1mm .5mm;background:#222;color:#fff;break-after:avoid}
+h3{font-size:1em;margin:.4mm 0 .1mm;border-bottom:.3pt solid #000;break-after:avoid}
+p{margin:.15mm 0}
+ul{margin:.1mm 0;padding-left:2.2mm}
+li{margin:0}
+b{font-weight:bold}
+i{font-style:italic}
+.k{background:#e8e8e8;padding:0 .3mm}
+code,.m{font-family:Consolas,monospace;font-size:.88em;word-break:break-all}
+.cols *{overflow-wrap:anywhere}
+table{table-layout:fixed}
+td:first-child,th:first-child{width:26%}
+ol{margin:.1mm 0;padding-left:3mm}
+table{border-collapse:collapse;width:100%;margin:.2mm 0;break-inside:avoid}
+td,th{border:.2pt solid #666;padding:0 .4mm;vertical-align:top}
+th{background:#ddd;font-weight:bold}
+.box{border:.4pt solid #000;padding:.3mm .5mm;margin:.3mm 0;break-inside:avoid}
+.w{color:#b00;font-weight:bold}
+sub,sup{font-size:.72em;line-height:0}
+pre{font-family:Consolas,monospace;font-size:.85em;margin:.2mm 0;line-height:1.05;white-space:pre}
+</style></head><body><div class="cols">
+
+<h1>REDES (RCCD) — MACHETE 2 · Guías 5–8 + teóricas 12–15</h1>
+
+<h2>1 · CONGESTIÓN (G5)</h2>
+<p class="w">Valores guía: SMSS=2KB · IW=2·SMSS=4KB · LW=1 SMSS (post time-out) · RW=min(IW,CWND) (post idle ≥1 RTO) · ISSTHRESH=64KB.</p>
+<p><b>Se envía min(CWND, RWND)</b> por RTT (mínimo, no máximo; siguen independientes). <b>RWND</b>=AdvWin=espacio libre del buffer del receptor (<b>flujo</b>, receptor, punto a punto). <b>CWND</b>=estimación del emisor de lo que aguanta la <b>red</b> (<b>congestión</b>, global). EffWin=MaxWin−(LBS−LBA); <b>FlightSize=LBS−LBA ⇒ LBA=LBS−Flight</b>.</p>
+<table><tr><th>Situación</th><th>SSTHRESH</th><th>CWND</th></tr>
+<tr><td>SS (CWND&lt;SSTH)</td><td>=</td><td>+min(N,SMSS) por ACK ⇒ <b>×2/RTT</b>; topear en SSTH</td></tr>
+<tr><td>CA (CWND≥SSTH)</td><td>=</td><td>+SMSS²/CWND por ACK ⇒ <b>+1 SMSS/RTT</b></td></tr>
+<tr><td>Time-out</td><td>max(<b>Flight</b>/2, 2SMSS)</td><td>1 SMSS → SS</td></tr>
+<tr><td>3 dup ACK (4 iguales)</td><td>max(Flight/2, 2SMSS)</td><td>SSTH+3SMSS; +1 SMSS por dup extra</td></tr>
+<tr><td>ACK nuevo en FR/FR</td><td>=</td><td>=SSTH → CA</td></tr></table>
+<p><b>SSTHRESH sale de FlightSize/2</b> (lo enviado=min(CWND,RWND)), <b>no de CWND/2</b>. <b>Ráfaga perdida entera ⇒ no vuelve ningún ACK ⇒ time-out</b> (nunca FR/FR). Por qué +1/RTT en CA: (CWND/SMSS ACKs)·(SMSS²/CWND)=SMSS; en SS: W ACKs·1=+W ⇒ ×2. N=bytes <i>nuevos</i> que reconoce el ACK (dup=0); min(N,SMSS) evita ACK division. SSTH sólo cambia ante pérdida (puede subir). Corte a la mitad: vaciar la cola + equidad AIMD (Chiu-Jain) + conservador.</p>
+<p><b>Método trazas</b>: tabla RTT | CWND | envía=min(CWND,RWND,falta) | ¿≥umbral? | SSTH | acumulado. Ráfaga perdida + RTO (=2RTT, timer desde el envío) = <b>2 RTTs</b>. Estacionario = SSTH deja de cambiar ⇒ ciclo: total=(datos/bytes por ciclo)×RTTs por ciclo. Supuestos: duración TO, borde CWND=SSTH, 1KB=1024, 1 ACK/segmento.</p>
+<p><b>Leer tablas (E12)</b>: ×2=SS · +1 SMSS=CA · cae a 1 SMSS=TO · cae a ~mitad(+3)=FR/FR · Flight&lt;CWND ⇒ limita RWND o la app · LBS baja ⇒ reTx desde LBA · LBA quieto + CWND sube ⇒ dup ACKs (inflado FR/FR).</p>
+<div class="box"><b>E9</b> (RWND 64, pierde ráfaga ≥X): X=32 ⇒ SSTH=16, ciclo 2+4+8+16+18..30=198KB/13RTT≈15,2KB/RTT; 1GB≈<b>68 800 RTT</b>. X=16 ⇒ SSTH=8, 50KB/8RTT=6,25 ⇒ <b>167 800 RTT</b> (×2,4, no ×2: el costo fijo pesa más). Sin cong.: 64KB/RTT ⇒ <b>16 388 RTT</b>.<br><b>E10</b> RWND 16, pierde ≥16, 40KB: 4,8,✗16,RTO,2,4,8,10,4 ⇒ 9 RTT=1,8s; CWND final 12 (≈12,67).<br><b>E11</b> pierde ≥20. a) RWND 28: 1er TO pierde min(32,28)=28 ⇒ SSTH=<b>14</b> (no 16); 2º pierde 20 ⇒ <b>10</b> (estacionario, 13 RTT≈650ms); ciclo 84KB/10RTT≈8,4. b) RWND 18 &lt; 20 ⇒ <b>nunca pierde ⇒ 18KB/RTT: más rápido</b>.<br><b>E8</b> (1 pérdida/s, 10 RTT/s): sin FR/FR SSTH→14; con FR/FR → 20 (sierra 20–38, AIMD puro).</div>
+<p><b>RTT/RTO</b>: RTT=segmento→ACK ≠ T<sub>tx</sub>=SMSS/BW. Est=α·Est+(1−α)·S; RTO=2·Est. α alto (.8–.9) estable; α bajo ⇒ RTO se desploma ⇒ <b>TO espurio</b>. Chequear S&gt;RTO vigente <i>antes</i> de actualizar. <b>Karn</b>: no samplear reTx; RTO×2 al reTx. <b>Jacobson</b>: Diff=S−Est; Est+=δDiff; Dev+=δ(|Diff|−Dev); RTO=Est+4Dev (δ=1/8).</p>
+<h3>Teórica</h3>
+<p><b>Congestión</b>=sobrecarga <b>sostenida</b>, demanda ≥ capacidad ⇒ QoS degradada (pérdidas + delay creciente). <b>Knee</b>: throughput deja de crecer, delay se dispara. <b>Cliff</b>: colapso, goodput→0. <b>Potencia</b>=throughput/delay (máx≈knee). Evitar=operar en knee; controlar=no caer del cliff.</p>
+<p><b>FIFO</b> (scheduling: quién sale) + <b>Drop Tail</b> (buffer: se tira el que llega) ⇒ <b>sincronización global</b>. <b>RED</b>: Avg=(1−w)Avg+w·Sample; &lt;MinTh encola, entre umbrales descarta con P (hasta MaxP≈0,02), ≥MaxTh descarta; MaxTh=2MinTh ⇒ avisa temprano a flujos al azar.</p>
+<p><b>Jain</b> f=(Σx)²/(n·Σx²) ∈[1/n,1]. <b>M/M/1</b> (Poisson, servicio exp, 1 server): ρ=λ/μ&lt;1; E[N]=ρ/(1−ρ), <b>E[T]=1/(μ−λ)</b>→∞ con ρ→1. <b>Mathis</b> BW=(MSS/RTT)·√(3/2)/√p (penaliza RTT largo/pérdidas; WiFi pierde por bits y TCP lo malinterpreta).</p>
+<p>No alcanzan: buffers ∞ (delay→TO→duplicados), ruteo (sólo reparte; si mira carga oscila), más BW (corre el problema), prealocar (datagramas: no hay circuito). <b>Taxonomía</b>: lazo abierto (circuitos) / cerrado: implícito (TCP, pérdidas) vs explícito (ECN, DECbit, ATM ABR). SS es "slow" vs TCP pre-1988 (mandaba toda la AdvWin). CWND no representativa: errores de bit, idle, app-limited.</p>
+
+<h2>2 · APLICACIÓN (G6)</h2>
+<p><b>Orden</b>: nombre → <b>DNS (UDP 53)</b> → IP → <b>TCP</b> (1 RTT handshake) → protocolo app. Integradores: repetir por <b>cada host nuevo</b>. Puertos: HTTP 80 · HTTPS 443 · SMTP 25 (587 submission) · POP3 110 · IMAP 143 · DNS 53/UDP.</p>
+<p><b>1 server/1 IP/1 puerto ⇒ N clientes</b>: TCP distingue por <b>4-upla</b>, cliente usa puerto efímero. Escalar = capacidad: <b>DNS round robin</b> (varios A; grueso, TTL/caché, no detecta caídas) vs <b>balanceador</b> (fino + health checks, punto único).</p>
+<p>Protocolo app: tipos de msg, sintaxis, semántica, reglas; abiertos (RFC) o propietarios. Proceso=IP+puerto (socket). Cliente habla primero; server espera en puerto conocido.</p>
+<table><tr><th>App</th><th>Pérdidas</th><th>BW</th><th>Delay</th><th>Transp.</th></tr>
+<tr><td>archivos/mail/web</td><td>no</td><td>elástico</td><td>no</td><td>TCP</td></tr>
+<tr><td>audio/video RT</td><td>tolera</td><td>mín. kbps–Mbps</td><td>~100ms</td><td>UDP</td></tr>
+<tr><td>video almacenado</td><td>tolera</td><td>mínimo</td><td>pocos s</td><td>TCP (DASH)</td></tr>
+<tr><td>juegos</td><td>tolera</td><td>pocos kbps</td><td>~100ms</td><td>UDP/TCP</td></tr></table>
+<p>TCP da conexión, confiabilidad, flujo, congestión; <b>no da temporización ni BW mínimo</b>. UDP no da nada pero no agrega handshake ni reTx que llegan tarde.</p>
+<h3>DNS</h3>
+<p>BD distribuida jerárquica (raíz→TLD→dominio), escala por <b>delegación de zonas + caché</b>; administra ICANN. App llama gethostbyname → UDP al server local. <b>Stub resolver</b> (PC, no resuelve) →<b>recursiva</b>→ <b>resolver</b> (ISP, 8.8.8.8) →<b>iterativas</b>→ raíz → TLD → … → autoritativo. El resolver arranca del <b>ancestro más cercano en su caché</b> (si no, raíz); .ar no sirve para .com. <b>Cada resolver tiene su caché</b>.</p>
+<p>RR <span class="m">nombre TTL IN tipo valor</span>: A/AAAA · <b>CNAME</b> (alias, seguir cadena; con CNAME no hay otros registros; apex no puede ser CNAME) · <b>MX</b> (prioridad, menor=mejor) · NS · SOA · PTR.</p>
+<p><b>NS</b>: (1) en la zona <b>padre</b> = <b>delegación</b> (referral); (2) en la zona = lista de autoritativos (aa). Varios por redundancia. DNS en otro gestor ⇒ cargar sus NS en el registrar. "Propagación" = TTL de NS viejos. <b>Glue</b>: A del NS en la zona padre cuando el NS está <b>dentro</b> de la zona delegada (si no, circular); va en ADDITIONAL.</p>
+<p><b>Primario</b> = 1er nombre del SOA; resto de NS = secundarios (copian si sube el <b>serial</b>). SOA: serial, refresh, retry, expire, minimum (=TTL caché negativa). Autoritativa (aa) vs no autoritativa (caché). Secciones ANSWER / AUTHORITY (NS) / ADDITIONAL (A extra). Cambio de IP: los cachés dan la vieja hasta que vence el TTL.</p>
+<p><b>Zone file</b>: nombre sin punto final = relativo (<span class="m">ads</span> en jmail.com=ads.jmail.com; <span class="m">cdn.akamai.com</span> sin punto=cdn.akamai.com.jmail.com). Server no autoritativo para un dominio no se consulta por él ⇒ esos registros no se usan.</p>
+<p><b>Secuencias</b>: tabla # | de→a | recursiva/iterativa | respuesta (referral NS+glue / aa A). 2ª resolución en .com arranca del NS de com (salta raíz). Mail masivo: <b>1 consulta MX por dominio distinto</b>, no por destinatario (A del MX en ADDITIONAL). DNS centralizado/sin caché/con conexión ⇒ cuello + punto de falla + RTTs extra (afecta cada HTTP; SMTP menos, encola).</p>
+<div class="box"><b>E4</b> (Thunderbird gmail → dc.uba.ar, abrir www.smn.gov.ar; cachés vacías): TCP mín. <b>3</b>: PC↔www.smn (80, HTTP) · PC↔smtp.gmail.com (587) · smtp.gmail↔mx.dc.uba.ar (25; no la abre la PC). UDP: sólo DNS: PC↔resolver-isp; resolver-isp↔raíz, ar, gov.ar, smn.gov.ar, com, gmail.com; smtp.gmail↔resolver-google↔raíz, ar, uba.ar, dc.uba.ar.<br><b>E10</b> spam a @uba.ar, @dc, @dm, @df (desde caché): 1 A del saliente + 4 MX = <b>5 consultas</b> (9 si los A no vienen en ADDITIONAL).<br><b>E11</b> www.jmail.com + logo cdn.akamai.com + iframe ads.spameitor.com: <b>3 TCP</b> (1 por host; con 1.0 también 3 porque hay 1 objeto por host).</div>
+<h3>Mail</h3>
+<p><b>Saliente</b> = SMTP de <b>tu proveedor</b> (smtp.gmail.com:587): autentica, encola, reintenta. ≠ entrante/MX (del <b>destinatario</b>) ≠ POP3 (baja) / IMAP (queda en server). <b>El MX lo busca el saliente</b> con <i>su</i> resolver; la PC sólo resuelve el A de su saliente.</p>
+<p>UA ─SMTP→ saliente ─(DNS MX+A)─SMTP→ MX destino → buzón ─POP3/IMAP→ UA. Webmail: navegador ─HTTPS→ webmail (SMTP por dentro). MX existe porque el mail va a otra máquina que la web (dc.uba.ar: web UBA, mail Google).</p>
+<p><b>SMTP</b>: TCP 25, server→server directo, 3 fases (saludo, transferencia, cierre). <span class="m">HELO · MAIL FROM · RCPT TO · DATA · (cuerpo, termina en ".") · QUIT</span>; resp 250 OK, 354 empezá cuerpo, 221 cierre. RFC 822: To/From/Subject + línea en blanco + cuerpo ASCII. IMAP: carpetas, sincroniza dispositivos.</p>
+<p><b>MIME</b>: SMTP ASCII 7 bits ⇒ binario en <b>base64</b>; headers MIME-Version, Content-Type (qué es), Content-Transfer-Encoding (cómo). HTTP reusa los <i>tipos</i> MIME pero el cuerpo va binario (sin CTE).</p>
+<h3>HTTP</h3>
+<p>Request: <span class="m">GET /ruta HTTP/1.1</span> + <b>Host obligatorio</b> (virtual hosting) + línea en blanco. HEAD=headers sin cuerpo. <span class="m">If-Modified-Since</span> → <b>304</b>. Respuesta: <span class="m">HTTP/1.1 200 OK</span> + Content-Type (lo decide el server, no la extensión) + Content-Length + blanco + cuerpo. POST upload → <b>201 Created</b> + Location. 1.1 agrega PUT, DELETE. Códigos: 200 · 201 · 301 Moved (+Location) · 304 · 400 · 401 · 404 · 505 Version Not Supported.</p>
+<p><b>Sin estado</b> (con estado: si uno se cae hay que recomponer estados inconsistentes). Estado afuera: <b>cookies, 4 partes</b>: (1) Set-Cookie en respuesta, (2) Cookie en pedidos siguientes, (3) archivo en el host (navegador), (4) BD del sitio indexada por ID; costo privacidad/rastreo. Auth en cada pedido (Authorization:; sin ella 401 + WWW-Authenticate).</p>
+<p><b>Se descarga solo</b>: <span class="m">&lt;img src&gt; &lt;link rel=stylesheet&gt; &lt;script src&gt; &lt;iframe src&gt;</span> (otra página ⇒ sus recursos) <span class="m">&lt;input type=image&gt;</span>. <b>No</b>: <span class="m">&lt;a href&gt;</span>, <span class="m">&lt;form action&gt;</span>. <b>Una conexión TCP por host</b> distinto (con su DNS previo; DNS es UDP). Pixel de rastreo: <span class="m">&lt;img src=count.php?Email=..&gt;</span>.</p>
+<div class="box"><b>RTTs/página</b> (objeto=1 RTT handshake + 1 RTT GET; embebidos tras parsear HTML): 1.0 no persistente: <b>2n</b> (paralelo: 4) · 1.1 sin pipelining: <b>2+(n−1)</b> · con pipelining: <b>2+1=3</b>. <b>E6</b> (HTML+css+2 png+input img, n=5): 10 / 6 / 3 RTT. Objeto = 2RTT + T<sub>tx</sub>.</div>
+<p><b>CDN</b>: servers que cachean contenido dentro/cerca de ISPs; reparte por <b>redirección DNS</b>: el DNS de la CDN devuelve la IP más cercana según desde dónde pregunta el <i>resolver</i>. <b>DASH</b>: video por HTTP en segmentos, el cliente elige bitrate.</p>
+
+<h2>3 · SEGURIDAD (G7)</h2>
+<p><b>Propiedades</b>: confidencialidad · integridad · autenticación · <b>no repudio</b> (algo que <i>sólo</i> A pudo generar ⇒ firma con privada; ⇒ autenticación, no al revés; <b>MAC no da no repudio</b>: B tiene la clave). +<b>originalidad</b> (no es copia, anti-replay) · <b>temporalidad</b> (no demorado) · <b>control de acceso</b> (quién hace qué) · <b>disponibilidad</b> (contra DoS). Por capa: app SSH, PGP · transp. TLS · red IPsec · enlace WEP/WPA/WPA2.</p>
+<p class="box"><b>Mi privada = probar que soy yo (firmar). Pública del otro = que sólo él lea (cifrar).</b> Simétrica (AES): rápida, problema = distribuir (N(N−1)/2 claves). Asimétrica (RSA): lenta, resuelve distribución ⇒ <b>híbrido</b>: asimétrica autentica + acuerda simétrica de sesión.</p>
+<p><b>Firma+cifrado (E2)</b>: F=E<sub>K−A</sub>(H(M)); C=E<sub>K+B</sub>(M+F). B: descifra C con K−B → M,F; F con K+A → digest; <b>recalcula H(M) y compara</b> (el hash no se invierte).</p>
+<p><b>MITM (E3)</b>: sin cert, el atacante cambia las públicas y descifra/recifra. <b>X.509</b>=(sujeto, <b>K+ del sujeto</b>, emisor, validez, serie, algoritmos) + <b>firma de la CA</b>. Verificar: firma con <b>K+CA</b> (preinstalada = raíz de confianza), fechas, nombre, no revocado (CRL/OCSP). Cadena raíz → intermedia → server.</p>
+<p><b>Clave compartida (5 msgs)</b>: A→B "soy A"; B→A R<sub>B</sub>; A→B K<sub>AB</sub>(R<sub>B</sub>); A→B R<sub>A</sub>; B→A K<sub>AB</sub>(R<sub>A</sub>). Nonce largo (128b) ⇒ anti-replay. Versión de 3 msgs ⇒ vulnerable a <b>reflexión</b> (T abre 2ª sesión mandándole a B su propio R<sub>B</sub>).</p>
+<p><b>Challenge-response</b> asimétrico: A manda <b>nonce</b>; B lo firma con K−B; A verifica con K+B. <b>Replay</b>: reusar msg viejo válido ⇒ nonce/timestamp <i>dentro</i> de lo firmado. <b>Reflexión</b>: devolverle el desafío al emisor ⇒ inicia el que prueba primero, claves distintas por sentido, challenges de conjuntos distintos. <b>KDC</b>: A→KDC A,K<sub>A</sub>(B,K<sub>S</sub>); KDC→B K<sub>B</sub>(A,K<sub>S</sub>); resuelve N² claves, pero punto central de confianza/falla.</p>
+<table><tr><th>SSH (E5)</th><th>Cliente</th><th>Servidor</th></tr>
+<tr><td>a) autenticar clientes</td><td>su privada</td><td>N públicas en <span class="m">authorized_keys</span></td></tr>
+<tr><td>b) autenticar server</td><td>K+S en <span class="m">known_hosts</span> (1ª vez fingerprint/<b>TOFU</b>, débil)</td><td>su privada</td></tr>
+<tr><td>c) con CA</td><td>su par + Cert<sub>C</sub> + <b>K+CA</b></td><td>su par + Cert<sub>S</sub> + <b>K+CA</b></td></tr></table>
+<p>Con CA no se guardan públicas ajenas: el cert llega en el handshake y se valida con K+CA. Revocar ⇒ CRL.</p>
+<table><tr><th>TLS 1.2 (E4)</th><th>Mensajes</th></tr>
+<tr><td>HELLO</td><td>ClientHello (versión, cipher suites, <b>R<sub>C</sub></b>) · ServerHello (elige suite, <b>R<sub>S</sub></b>)</td></tr>
+<tr><td>Key exchange</td><td>Certificate (Cert<sub>S</sub>) · [CertificateRequest] · ServerHelloDone · ClientKeyExchange (<b>PMS cifrado con K+S</b>) · ChangeCipherSpec · Finished</td></tr>
+<tr><td>Data</td><td>todo simétrico + MAC</td></tr></table>
+<p>master=PRF(PMS,"master secret",R<sub>C</sub>+R<sub>S</sub>); <b>nonces ⇒ sesión distinta ⇒ anti-replay</b>. Finished=MAC de todo el handshake. <b>TLS mutuo</b>: CertificateRequest → cliente manda Certificate + <b>CertificateVerify</b> (firma del handshake). Autenticar empleados ⇒ TLS mutuo con CA de la empresa. Capas: TLS (app/TCP) · IPsec (red: <b>AH</b>=integridad+aut, no cifra; <b>ESP</b>=confidencialidad) · WPA (enlace).</p>
+<p><b>Kerckhoffs</b>: algoritmo público, clave secreta. Factor de trabajo exponencial en el largo de clave. <b>OTP</b> inviolable (Shannon) pero impráctico. Sustitución (enmascara, preserva orden): César (rotación; probar 25 y ver cuál da texto legible), monoalfabética (26!≈4·10²⁶ claves, cae por frecuencias), polialfabética. Transposición (reordena): clave sin letras repetidas (MEGABUCK) numera columnas, se escribe por filas y lee por columnas. Cifrado≠código (Navajo). Clave 64b juguete, 128/256 comercial. DES 64b/16 rondas, 3DES=E·D·E, AES hoy. Hash: muchos a uno, tamaño fijo, avalancha; preimagen / 2ª preimagen / colisión; MD5(128), SHA-1(160) rotos, SHA-2 vigente. <b>K−(K+(m))=m=K+(K−(m))</b>: pública primero=confidencialidad, privada primero=firma (autenticidad+integridad+no repudio; <b>no da confidencialidad</b>).</p>
+<p class="box"><b>RSA</b>: n=pq, z=(p−1)(q−1), e coprimo con z, <b>ed mod z=1</b>; c=m<sup>e</sup> mod n, m=c<sup>d</sup> mod n. Ej p=3,q=11: n=33, z=20, e=3, d=7.</p>
+
+<h2>4 · BLOCKCHAIN</h2>
+<p>Problema: <b>doble gasto</b> sin autoridad central (firma no da orden/unicidad/acuerdo). Ledger replicado; bloque = <b>hash del anterior</b> (cambiar uno rompe los siguientes) + raíz <b>Merkle</b> (inclusión en O(log n)). Tx firmadas con privada del dueño (dirección = hash de la pública). <b>Sybil</b>: identidades gratis ⇒ votar con recurso escaso.</p>
+<p><b>PoW</b>: nonce con H(bloque)&lt;target (caro hacer, barato verificar); gana la cadena con más trabajo; <b>51%</b> reescribe historia; confirmar ≈ esperar k bloques; dificultad cada 2016 bloques (~10 min); gossip + forks transitorios (huérfanos). Atacante con q&lt;50% ⇒ chance de alcanzar cae exponencial con z bloques; "6 confirmaciones (~1h)" es convención. Bitcoin ~7 tx/s; bloques más rápidos ⇒ más forks. Gastar = referenciar UTXO + firmar (ECDSA). "La firma dice quién; el consenso, cuál primero."</p>
+<table><tr><th></th><th>PoW</th><th>PoS</th><th>BFT (PBFT)</th></tr>
+<tr><td>Recurso</td><td>cómputo</td><td>capital (slashing)</td><td>identidad conocida</td></tr>
+<tr><td>Red</td><td>abierta</td><td>abierta</td><td>permisionada</td></tr>
+<tr><td>Finalidad</td><td>probabilística</td><td>económica</td><td>inmediata</td></tr>
+<tr><td>Tolera</td><td>&lt;50% cómputo</td><td>&lt;1/3 stake</td><td>f&lt;n/3 (n≥3f+1)</td></tr>
+<tr><td>Ej.</td><td>Bitcoin</td><td>Ethereum (2022)</td><td>CometBFT</td></tr></table>
+<p> Ethereum = SMR (estado<sub>n+1</sub>=δ(estado<sub>n</sub>,txs)) + smart contracts en la EVM + <b>gas</b> (acota cómputo, corta loops; bugs inmutables: The DAO). <b>Conviene sólo si muchos escriben sin confiar y no hay tercero aceptable</b>; si no, BD replicada.</p>
+
+<h2>5 · ARQUITECTURAS (G8)</h2>
+<p class="box"><b>Receta diseño (E1,2,4)</b>: 1) supuestos 2) diagrama cajas+flechas 3) <b>por componente</b>: interfaz (operaciones) · procesamiento ("recibe X → hace Y → emite Z") · datos · nivel (UI/proc/datos) 4) <b>por conector</b>: protocolo (REST, RPC, pub/sub, BD compartida) + acoplamiento 5) justificar.</p>
+<p><b>Estilos</b>: en capas · objetos/servicios (REST: recursos + verbos, stateless) · pub/sub (event-based) · shared data space.</p>
+<table><tr><th>ref \ temp</th><th>Temporal acoplado</th><th>Temporal desacoplado</th></tr>
+<tr><td><b>Ref. acoplado</b></td><td>directa (RPC, HTTP)</td><td>mailbox / cola</td></tr>
+<tr><td><b>Ref. desacoplado</b></td><td>event-based (pub/sub)</td><td>shared data space (BD, tuplas)</td></tr></table>
+<p>Referencial = ¿el emisor conoce al receptor? Temporal = ¿vivos a la vez? <b>Pub/sub</b> por topic o por <b>contenido</b> (el publicador manda <b>valores</b>, el <b>suscriptor</b> pone el rango; filtra el middleware). Notificar con dato vs aviso + ir a buscar. Lease en suscripciones.</p>
+<p><b>Condición A y B</b> ⇒ el middleware no guarda estado ⇒ <b>controlador</b> que se suscribe, decide y publica comandos (regla en un lugar, actuadores tontos; punto único ⇒ replicar). Suscribirse a todo el rango para enterarse del "apagar" (E4).</p>
+<p><b>Wrappers vs broker (E5)</b>: wrapper=adaptador de interfaz; reemplazar C,D por E ⇒ 2. N apps todos contra todos: <b>N(N−1)</b>; con broker <b>2N</b> (mejor desde N≥4, agregar = O(1); costo: punto central).</p>
+<p><b>Idempotencia (E6)</b>: se pierde el OK sobre UDP ⇒ reintento ⇒ <b>transferencia doble</b> ⇒ <b>ID de transacción</b> (server detecta duplicado y re-responde). TCP no lo resuelve (caída entre procesar y responder: es de aplicación).</p>
+<p>2-tier (a)→(e): corte UI / app / datos, de <b>thin</b> (sólo pantalla) a <b>fat</b> client. <b>Validación (E7)</b>: cliente (UX, menos viajes) <b>y</b> servidor (seguridad, el cliente se saltea). Distribución <b>vertical</b> (capas en máquinas) vs <b>horizontal</b> (réplicas/particiones).</p>
+<h3>P2P</h3>
+<p><b>Overlay</b>=red lógica sobre la física (1 enlace lógico = varios saltos). <b>Estructurado</b> (DHT, Chord: anillo + finger table, <b>O(log N)</b>, hay que mantenerlo) vs <b>no estructurado</b>: <b>flooding</b> (TTL, R(k)=d(d−1)<sup>k−1</sup> msgs en salto k; rápido, robusto, carísimo) / <b>random walk</b> (S≈N/r pasos con r réplicas; barato, lento, no garantiza cubrir) / <b>super peers</b> (índice por grupo; débil si cae).</p>
+<div class="box"><b>E8</b> sensores 5 pisos (BT al piso adyacente; nodo piso 1 WiFi+BT=<b>gateway</b>): overlay jerárquica, super peer por piso encadenados → AP; recolección por árbol <b>en paralelo + timeout + agregación</b>. Anillo: N msgs exactos pero O(N) latencia.<br><b>E9</b> 1TB, 10000 piezas, 100 servers, 10 vecinos: <b>T<sub>pieza</sub>=(2h+2)·RTT/2+T<sub>tx</sub></b> (h=saltos búsqueda). Clase (100ms, 1Gbps): flooding≈3,5h · RW≈8,3h · super peer≈3,3h. Guía: RTT 200ms.</div>
+<h3>Cloud / Fog / Edge (E10)</h3>
+<p>Latencias: dispositivo &lt;1ms · edge (AP/antena) 1–10 · fog (DC local) 10–50 · cloud 50–200ms. <b>1ms RTT ≈ 100km</b> de fibra. <b>4 motivos para el borde</b>: <b>latencia</b> (tiempo real) · <b>BW</b> (filtrar/agregar antes de subir) · <b>autonomía</b> (sin Internet) · <b>regulación/privacidad</b>. Cloud = vista global, cómputo masivo. Tabla: componente | capa | procesa | datos | interfaces | por qué. Autos entre sí: <b>V2V broadcast</b>. Orquestación: dónde corre cada servicio + migrar (handoff). Problemas: placement (NP-difícil), migración, consistencia entre niveles, autonomía (CRDTs). Fog=jerarquía, edge=borde de acceso, cloudlet=DC en una caja.</p>
+
+<h2>6 · COMPUTO DISTRIBUIDO</h2>
+<p><b>Rasgos</b>: concurrencia, sin reloj global, fallas independientes (sólo mensajes). <b>Modelos</b>: tiempo (sínc / parcialmente sínc / asínc) · fallas (crash / crash-recovery / bizantina) · canales (confiables / pérdidas equitativas / arbitrarios).</p>
+<p>Por qué distribuir: escalar, tolerar fallas, localidad, costo. Vertical tiene techo; horizontal exige coordinar.</p>
+<p><b>Amdahl</b> S(n)=1/((1−p)+p/n) → 1/(1−p). p=0,95: S(8)=5,9, S(64)=15,4, S(1024)=19,6 ⇒ tope <b>20×</b> (p=0,9 ⇒ 10×). Gustafson: si el problema crece con n, mejora. 10 000 servers MTBF 30 años ⇒ ~1 falla/día. <b>Cola</b>: 1−0,99<sup>100</sup>≈63% (un pedido que toca 100 servers ve la latencia p99). Péndulo C↔D según costo computar/comunicar/latencia.</p>
+<p><b>8 falacias</b>: red confiable, latencia 0, BW ∞, red segura, topología fija, un admin, transporte gratis, red homogénea.</p>
+<p><b>Dos generales</b>: sin acuerdo garantizado sobre canal no confiable. <b>FLP</b>: asincrónico + 1 falla ⇒ no hay consenso determinístico garantizado. <b>CAP</b>: ante partición, C o A. <b>PACELC</b>: si P → A/C; si no (Else) → Latencia/Consistencia.</p>
+<p><b>SMR</b>: mismo orden de operaciones ⇒ mismo estado. Problema = acordar el orden del log = consenso (líder ordena). Tolerar f: crash <b>n≥2f+1</b> (Paxos, Raft), bizantinas <b>n≥3f+1</b> (PBFT): dos mayorías se intersectan ⇒ siempre hay testigo. Quórum <b>R+W&gt;N</b> ⇒ toda lectura ve la última escritura (N=3,W=2,R=2 tolera 1 caída); bajar R/W compra latencia por consistencia.</p>
+<table><tr><th>Modelo</th><th>Garantiza</th><th>Ej.</th></tr>
+<tr><td>Linealizable</td><td>cada op. instantánea entre inicio y fin (consenso por escritura)</td><td>Spanner, etcd</td></tr>
+<tr><td>Secuencial</td><td>orden total común compatible con cada proceso</td><td>multiproc. ideal</td></tr>
+<tr><td>Causal</td><td>si a pudo influir en b, todos ven a antes</td><td>COPS, chats</td></tr>
+<tr><td>Eventual</td><td>si cesan escrituras, convergen</td><td>DNS, Dynamo, CRDT</td></tr></table>
+<p>Hacia abajo: menos coordinación/latencia, más disponibilidad, más conflictos para el programador. Cómo se vive con las imposibilidades: aleatoriedad, timeouts (sincronía parcial), detectores de falla. Nube: configuración (etcd, Chubby) = consenso + líder; MapReduce lleva cómputo a los datos.</p>
+<p><b>a→b</b> ("ocurrió antes"): mismo proceso con a primero; o a=envío y b=recepción del mismo msg; o transitividad. Si ninguno: <b>concurrentes</b>.</p>
+<div class="box"><b>Lamport</b>: (1) evento local C++; (2) enviar: C++ y adjuntar C; (3) recibir: <b>C=max(C,C<sub>msg</sub>)+1</b>. <b>a→b ⇒ C(a)&lt;C(b), no al revés</b>. Orden total: desempatar por id de proceso.<br><b>Vectoriales</b>: V[i]++ local; recibir: máx componente a componente + V[i]++. <b>a→b ⟺ V(a)&lt;V(b)</b> (todas ≤ y una &lt;); ninguno ≤ ⇒ <b>concurrentes</b>. Costo: n enteros por msg.
+<pre>p1: a(1) ─m1→p2   b(2) ─m2→p3
+p2: c(1) d(2)  e=max(2,1)+1=3
+p3:            f=max(0,2)+1=3
+     a     b     c     d     e     f
+L    1     2     1     2     3     3
+V  100   200   010   020   130   201</pre>C(c)=1&lt;C(b)=2 pero son concurrentes (Lamport no lo ve; V: 010 vs 200 no comparables).</div>
+<p>Relojes: cristal 20 ppm ≈ 1,7 s/día; NTP ms, PTP µs. <b>TrueTime</b> (Spanner): TT.now()=[earliest, latest], ancho 2ε; ε≈1ms + deriva 0,2ms/s desde la última sync (GPS + atómicos, cada 30s), ~1–7ms. API: TT.after(t)=t ya pasó seguro (t&lt;earliest); TT.before(t)=no llegó (t&gt;latest). <b>ε=1ms+0,2ms/s·Δt</b> (Δt=15s ⇒ ε=4ms, intervalo 8ms). <b>Commit wait</b>: s=TT.now().latest, no liberar locks ni responder esperar hasta TT.after(s) (≈2ε) antes de hacer visible ⇒ <b>consistencia externa</b> (T1 commit en A y después arranca T2 en B ⇒ s1&lt;s2, para cualquier error ±ε). Convierte incertidumbre en latencia (2ε por commit, se solapa con Paxos). <b>vs Lamport</b>: Lamport ordena según causalidad que viaja en msgs; TrueTime ordena también eventos <i>sin</i> mensajes entre sí (anclado a hora real).</p>
+<p class="w">Teórica: definir en 1 línea → qué problema resuelve → trade-off/limitación → ejemplo. "X resuelve Y a cambio de Z".</p>
+</div></body></html>
