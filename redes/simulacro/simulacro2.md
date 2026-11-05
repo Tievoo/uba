@@ -255,3 +255,51 @@ Elegí **dos** y respondelas en ≤ 10 líneas cada una:
 - Pregunta 7: relojes de Lamport vs vectoriales (¿qué no te garantiza C(a) < C(b)?).
 - Pregunta 8: TrueTime y commit wait.
 - Pregunta 2: PoW, ataque Sybil y 51 %.
+
+### Solución
+
+#### Pregunta 2 — PoW, Sybil y 51 %
+
+**El problema (Sybil).** En una red abierta, crear identidades es gratis. Si el consenso fuera **un nodo = un voto**, un atacante crearía miles de nodos falsos, tendría la mayoría y decidiría qué historia vale. Por ejemplo, podría deshacer un pago y gastar dos veces la misma moneda.
+
+**La idea de Nakamoto (2008).** El voto se ata a un **recurso escaso y caro**, el cómputo, en vez de a las identidades. Para proponer el próximo bloque hay que encontrar un `nonce` tal que
+
+$$H(\text{bloque} \,\|\, nonce) < target$$
+
+Es **caro de encontrar**, porque solo se puede por fuerza bruta, y **barato de verificar**, porque alcanza con un hash. Quien lo encuentra gana el **derecho a proponer el bloque** y la recompensa. Crear mil nodos no sirve de nada si no tenés más cómputo.
+
+**Cadena más larga.** Los nodos aceptan la cadena con **más trabajo acumulado**. Para reescribir un bloque que tiene k bloques encima, el atacante tiene que rehacer la PoW de ese bloque y de todos los siguientes, y además alcanzar a la cadena honesta, que sigue creciendo. La probabilidad de lograrlo cae **exponencialmente con k**, por eso se esperan unas 6 confirmaciones.
+
+**El 51 % no desaparece, se traslada.** El ataque pasa de exigir la mitad de los *nodos* a exigir la mitad del **poder de cómputo** de toda la red. Eso es carísimo en hardware y energía. Además, con ese mismo cómputo se gana más minando honestamente, por la recompensa, que atacando.
+
+**Trade-off.** El costo es un gasto enorme de energía. La alternativa es **PoS**, donde el colateral es dinero (stake) en vez de cómputo.
+
+#### Pregunta 7 — Relojes de Lamport vs vectoriales
+
+**Lamport.** Cada proceso tiene un contador $C$:
+- lo incrementa en cada evento;
+- lo adjunta a cada mensaje;
+- al recibir hace $C = \max(C, C_{msg}) + 1$.
+
+Garantiza
+
+$$a \to b \;\Rightarrow\; C(a) < C(b)$$
+
+pero **la vuelta no vale**: si $C(a) < C(b)$, puede ser que $a$ y $b$ sean **concurrentes**. Lamport da un orden total consistente con la causalidad, pero no permite distinguir "antes" de "concurrente".
+
+**Vectoriales.** Cada proceso $i$ tiene un vector $V$ con **una posición por proceso** (n procesos):
+- en un evento local o un envío: $V[i]{+}{+}$;
+- al enviar, adjunta $V$;
+- al recibir $V_{msg}$: $V[j] = \max(V[j], V_{msg}[j])$ para todo $j$, y después $V[i]{+}{+}$.
+
+Con $V(a) < V(b)$ definido como "$\le$ en todas las componentes y $<$ en al menos una":
+
+$$a \to b \;\Longleftrightarrow\; V(a) < V(b)$$
+
+Si no vale ni $V(a) \le V(b)$ ni $V(b) \le V(a)$, entonces $a \parallel b$: **detectan concurrencia**. Eso sirve, por ejemplo, para detectar escrituras en conflicto entre réplicas.
+
+**Ejemplo.** Sean $a$ el **segundo** evento de $P_1$ y $b$ el **primer** evento de $P_2$, sin mensajes entre ellos:
+- $V(a) = (2,0,0)$ y $V(b) = (0,1,0)$: ninguno domina al otro, así que son concurrentes.
+- Con Lamport, $C(a) = 2$ y $C(b) = 1$: parecería que $b$ fue antes que $a$.
+
+**Costo.** Cada mensaje lleva **n enteros** en vez de uno, y cada proceso guarda n valores. Crece con la cantidad de procesos y se complica si los procesos entran y salen dinámicamente.
