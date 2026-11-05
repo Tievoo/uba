@@ -83,6 +83,33 @@ Location: /inscripciones/987
 
 En el hall de un hotel hay un WiFi donde los huéspedes pueden conectarse y navegar en internet usando sus dispositivos móviles. Se desea que sólo puedan navegar la Web vía un servidor Proxy. Repetidas veces, hackers han espiado las peticiones de los clientes. Diseñe un sistema criptográfico de clave asimétrica, que garantice la autenticidad del proxy y la confidencialidad de los clientes. Aclare dónde deberían instalarse los certificados.
 
+### Solución
+
+**Supuesto.** El hotel obtiene para el proxy un certificado digital firmado por una **CA reconocida**: $Cert_P = \{ \text{proxy.hotel.com}, K_P^+ \}$ firmado con $K_{CA}^-$.
+
+**Diseño.** Los clientes se conectan al proxy con **TLS común**, que autentica solo al servidor. No hace falta autenticar a los clientes, porque el enunciado no lo pide, y darles certificados a huéspedes que van y vienen sería volver al problema de distribuir claves.
+
+1. **Hello:** el cliente y el proxy intercambian nonces $R_C$ y $R_S$ y acuerdan los algoritmos.
+2. **Certificate:** el proxy manda $Cert_P$. El cliente lo verifica:
+   - que la firma sea válida con $K_{CA}^+$;
+   - que el nombre coincida con el del proxy configurado;
+   - que esté vigente y no revocado.
+3. **Key exchange:** el cliente genera un pre-master secret (PMS) y lo manda cifrado como $E_{K_P^+}(PMS)$. Solo el proxy puede descifrarlo, con $K_P^-$.
+4. **Claves de sesión:** los dos derivan $K_{sesión} = PRF(PMS, R_C, R_S)$. Desde ahí, todas las peticiones del cliente viajan cifradas con criptografía simétrica.
+
+**Qué garantiza cada cosa.**
+- **Autenticidad del proxy.** El certificado es público, así que cualquiera puede reenviarlo. Lo que no puede hacer un impostor es descifrar el PMS, porque no tiene $K_P^-$. Sin el PMS no puede derivar las claves de sesión, y el handshake falla en el `Finished`.
+- **Confidencialidad.** Un hacker que escucha la WiFi ve $E_{K_P^+}(PMS)$ y tráfico cifrado con claves de sesión que no puede calcular.
+
+**Dónde se instala cada cosa.**
+
+| Dónde | Qué |
+|---|---|
+| Proxy | $Cert_P$ y su clave privada $K_P^-$, que nunca sale del proxy |
+| Dispositivos de los huéspedes | El certificado raíz de la CA, con $K_{CA}^+$. **Ya viene preinstalado en el OS o el navegador**, así que no viaja por la red y el atacante no lo puede reemplazar |
+
+*Extra:* si además se quisiera que solo naveguen huéspedes, se agrega autenticación de cliente, por ejemplo TLS mutuo o una clave por habitación. No lo pide el enunciado.
+
 ## Ejercicio 4 — Seguridad *(Guía 7, ej 9 de parcial)*
 
 La empresa Security First expone una API usando el protocolo HTTP. Dicha API tiene un método `getPrice` que devuelve el precio de frutas usando la siguiente url: `http://api.securityfirst.com/?method=getPrice&fruit=Pera`.
