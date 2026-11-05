@@ -184,6 +184,71 @@ a. Definí los componentes con su **interfaz**, su **procesamiento** y sus **dat
 b. Para cada conector, indicá el **acoplamiento referencial y temporal**. Justificá dónde usarías pub/sub y dónde comunicación directa.
 c. Ubicá cada componente en **edge / fog / cloud** y justificá con los motivos vistos. ¿Qué pasa si un inspector consulta un auto justo cuando el poste de esa cuadra está desconectado de la nube?
 
+### Solución
+
+**Supuestos**
+1. El sensor solo detecta si el lugar está **ocupado o libre** y lo informa con su `idLugar`. No lee patentes.
+2. El conductor paga por anticipado desde la app: indica el **lugar**, la **patente** y la cantidad de horas. La nube cruza ocupación y pagos: un lugar ocupado sin pago vigente es una **infracción**.
+3. Se agrega un **gateway de zona** (nodo fog) que agrupa los postes de varias cuadras y tiene el broker de los carteles.
+4. El poste mantiene el estado de su cuadra aunque no tenga enlace a la nube.
+
+**Diagrama**
+
+```
+        [Sensor]...[Sensor]           (radio corto alcance)
+              \     /
+              [Poste cuadra X] ──pub cuadra/X──► [Gateway zona (broker)] ──► [Cartel esquina]
+                    │                                   ▲ sub cuadra/X, X+1, X+2
+                    │ cola (store-and-forward)
+                    ▼
+               [Nube: servidor] ◄──request/response── [App conductor]
+                    │
+                    └──pub infracciones/zona──► [Terminal inspector]
+```
+
+#### a. Componentes
+
+| Componente | Interfaz | Procesamiento | Datos |
+|---|---|---|---|
+| Sensor | Emite `ocupado(idLugar)` / `libre(idLugar)` | Detecta un cambio en el lugar y lo informa | Estado de su lugar |
+| Poste | Recibe los eventos de los sensores. Publica `cuadra/X: libres=n`. Envía `cambioLugar(idLugar, estado, ts)` a la nube | Mantiene el estado de la cuadra, calcula los lugares libres y encola los eventos para la nube si no hay enlace | Ocupación de cada lugar de su cuadra y la cola de eventos pendientes |
+| Gateway de zona | Broker pub/sub: `publish(tópico, msg)`, `subscribe(tópico)` | Reenvía las publicaciones de los postes a los carteles suscriptos | Suscripciones y último valor de cada tópico |
+| Cartel | Se suscribe a `cuadra/X`, `cuadra/X+1`, ... | Suma los libres de las cuadras próximas y los muestra | Último valor recibido por cuadra |
+| App | `verLibres(zona)`, `pagar(lugar, patente, horas)` | Muestra el mapa y hace el pago | Sesión y datos del usuario |
+| Servidor (nube) | `cambioLugar(...)`, `verLibres(zona)`, `pagar(...)`. Publica `infracciones/zona` | Cruza ocupación con pagos y detecta infracciones. Registra el **último contacto de cada poste** (heartbeat) | Ocupación por lugar, pagos (patente, lugar, vencimiento), usuarios, infracciones, estado de los postes |
+| Terminal del inspector | Se suscribe a `infracciones/zona`. `consultar(lugar)` | Muestra las infracciones de su zona | Últimas infracciones y último contacto de cada poste |
+
+#### b. Conectores y acoplamiento
+
+| Conector | Ref. | Temp. | Tipo | Por qué |
+|---|---|---|---|---|
+| Sensor → Poste | Acoplado | Acoplado | **Directa** (radio) | Es local a la cuadra y el evento es inmediato. Si el poste no está, no hay a quién guardarle nada |
+| Poste → Cartel (vía gateway) | **Desacoplado** | Acoplado | **Pub/sub** | El cartel muestra varias cuadras. Así no necesita conocer a cada poste, y sumar un poste o un cartel no cambia a los demás |
+| Poste → Nube | Acoplado | **Desacoplado** | **Mailbox / cola** | Si se cae el enlace, los eventos se encolan en el poste y se envían al reconectar. No se pierde nada |
+| App → Nube | Acoplado | Acoplado | **Directa** (request/response, HTTPS) | El pago necesita una confirmación en el momento |
+| Nube → Terminal | **Desacoplado** | Acoplado | **Pub/sub** | La nube publica las infracciones por zona y cada inspector se suscribe a la suya, sin que la nube sepa cuántos hay |
+| Terminal → Nube | Acoplado | Acoplado | **Directa** | Para consultar un lugar puntual |
+
+#### c. Ubicación y desconexión
+
+| Capa | Componentes | Motivo |
+|---|---|---|
+| Edge | Sensores, postes, carteles | **Latencia:** un cambio de lugar llega al cartel en ms, sin pasar por la nube, y así se cumplen los 2 s. **Ancho de banda:** el poste agrega las lecturas y solo manda cambios |
+| Fog | Gateway de zona | **Autonomía:** los carteles ven las cuadras vecinas aunque se caiga la nube. Sigue cumpliendo la latencia porque está en la zona |
+| Cloud | Servidor | Vista **global** de la ciudad: pagos, usuarios, infracciones. No es urgente ni local |
+| Dispositivos de usuario | App, terminal | Hablan con la nube por Internet (4G/5G) |
+
+**El inspector consulta un auto con el poste desconectado de la nube.**
+
+- **Cómo se detecta.** El servidor registra el **último contacto** de cada poste por heartbeat. Si pasa un timeout sin noticias, marca el poste como **desconectado**.
+- **Qué ve el inspector.** No se le muestra un dato erróneo como si fuera actual. Ve la información marcada como *"Poste X sin conexión. Datos al hh:mm"*, con el último estado conocido. La terminal guarda ese último momento como referencia, y el inspector puede verificar en persona, porque está ahí.
+- **Por qué los datos están desactualizados.**
+  - **Pagos:** la nube los sigue teniendo al día, porque llegan por la app.
+  - **Ocupación de esa cuadra:** está desactualizada desde el corte. Los autos que llegaron o se fueron después están en la cola del poste.
+  - **Consecuencias:** puede haber falsos negativos, de autos que llegaron y no se ven, y falsos positivos, de lugares que se liberaron y la nube todavía cree ocupados.
+- **Al reconectar.** El poste vacía su cola en orden, con los timestamps de cada evento. La nube actualiza la ocupación y recalcula las infracciones de ese período. Es **consistencia eventual**.
+- **El trade-off es CAP.** Ante la partición se elige **disponibilidad**: el sistema sigue respondiendo y avisa que el dato puede estar viejo, en vez de bloquear la consulta.
+
 ## Ejercicio 6 — Teórica *(del resumen teórico, tapá la sección 9)*
 
 Elegí **dos** y respondelas en ≤ 10 líneas cada una:
