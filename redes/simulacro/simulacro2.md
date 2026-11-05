@@ -35,6 +35,50 @@ En el peor caso, un resolver que lo cacheó justo antes del cambio sigue respond
 
 Explicar las diferencias entre los mensajes GET y POST de HTTP. Mostrar un ejemplo de cada tipo de mensaje.
 
+### Solución
+
+| | **GET** | **POST** |
+|---|---|---|
+| Para qué | **Obtener** un recurso, sin modificar nada | **Enviar datos** al servidor, por ejemplo para crear un recurso, mandar un formulario o subir un archivo |
+| Dónde van los datos | En la **URL** (query string `?k=v&...`). **No lleva body** | En el **body**, descrito con `Content-Type` (por ejemplo `application/json` o `multipart/form-data`) y `Content-Length` |
+| Visibilidad / límites | Los parámetros quedan en la URL: historial, logs, bookmarks. Largo limitado | No aparecen en la URL. Sin límite práctico de tamaño (archivos) |
+| Seguro (no cambia estado) | Sí | No |
+| Idempotente | Sí: repetirlo da el mismo resultado | **No**: repetirlo puede crear dos recursos, por eso el navegador pregunta "¿reenviar formulario?" |
+| Cacheable | **Sí**. Puede ser **condicional** (`If-Modified-Since` → `304 Not Modified`), y eso lo aprovechan los proxies y cachés | En general no |
+| Respuestas típicas | `200 OK` con el recurso, `304 Not Modified`, `404 Not Found` | `201 Created` con el header `Location` del recurso nuevo, o `200 OK` |
+
+**Ejemplo GET.** Una línea de request, los headers y una línea en blanco, sin body:
+
+```
+GET /materias?depto=dc&anio=2026 HTTP/1.1
+Host: www.uba.ar
+Accept: text/html
+If-Modified-Since: Mon, 02 Nov 2026 10:00:00 GMT
+
+```
+
+Respuesta posible: `HTTP/1.1 304 Not Modified`. No trae body: el cliente usa su copia en caché.
+
+**Ejemplo POST.** La línea de request y los headers, una línea en blanco y después el body:
+
+```
+POST /inscripciones HTTP/1.1
+Host: www.uba.ar
+Content-Type: application/json
+Content-Length: 40
+
+{"alumno": "123/21", "materia": "redes"}
+```
+
+Respuesta posible:
+
+```
+HTTP/1.1 201 Created
+Location: /inscripciones/987
+```
+
+**Nota.** Si un POST va sobre HTTP sin TLS, sus datos son tan visibles en la red como los de un GET. "Va en el body" no significa que esté cifrado: para eso hace falta HTTPS.
+
 ## Ejercicio 3 — Seguridad *(Guía 7, ej 7 de parcial)*
 
 En el hall de un hotel hay un WiFi donde los huéspedes pueden conectarse y navegar en internet usando sus dispositivos móviles. Se desea que sólo puedan navegar la Web vía un servidor Proxy. Repetidas veces, hackers han espiado las peticiones de los clientes. Diseñe un sistema criptográfico de clave asimétrica, que garantice la autenticidad del proxy y la confidencialidad de los clientes. Aclare dónde deberían instalarse los certificados.
