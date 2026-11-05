@@ -121,6 +121,56 @@ Es necesario agregar un método nuevo a la API que haga lo mismo que el `getPric
 
 *Nota: es requisito para lo anterior no usar encripción sobre la totalidad del mensaje y no manejar sesiones.*
 
+### Solución
+
+**Idea.** Cada pedido viaja **firmado digitalmente por el cliente** con su clave privada.
+- **Integridad:** si alguien cambia un parámetro, la firma no cierra.
+- **No repudio:** solo el cliente tiene su clave privada, así que no puede negar el pedido.
+
+Se firma un **hash** de los parámetros, no el mensaje entero. Así se cumple la nota: los datos viajan en claro. Como no hay sesiones, **cada pedido se autentica solo**.
+
+**1. Qué información tiene cada parte**
+
+| Parte | Qué tiene |
+|---|---|
+| Cliente | Su par de claves: $K_C^-$ (privada, solo él) y $K_C^+$. Opcionalmente, un certificado $Cert_C$ firmado por una CA |
+| Servidor | La $K_C^+$ de cada usuario, asociada a su identificador. Se registra al dar de alta la cuenta, o se obtiene de $Cert_C$ verificándolo con $K_{CA}^+$. Además, la lista de nonces ya usados en la ventana de tiempo vigente |
+| Ambos | La misma función de hash $H$ (por ejemplo SHA-256) y el mismo formato para concatenar los parámetros |
+
+**2. Una posible URL**
+
+```
+http://api.securityfirst.com/?method=getPriceSigned&fruit=Pera&user=bruno
+    &ts=1730800000&nonce=8f3a91c2&sig=<firma>
+```
+
+donde
+
+$$sig = E_{K_C^-}\big(H(\texttt{getPriceSigned} \,\|\, \texttt{Pera} \,\|\, \texttt{bruno} \,\|\, ts \,\|\, nonce)\big)$$
+
+La firma también podría ir en un header, como `Authorization`. Funciona igual, pero el enunciado pide una URL.
+
+**3. Qué hace cada parte**
+
+*Cliente, en cada pedido:*
+1. Genera un `nonce` aleatorio y toma el `ts` actual.
+2. Calcula $h = H(\text{method} \| \text{fruit} \| \text{user} \| ts \| nonce)$.
+3. Firma: $sig = E_{K_C^-}(h)$.
+4. Manda la URL con los parámetros en claro y la firma.
+
+*Servidor, al recibirlo:*
+1. Busca la $K_C^+$ de `user`. Si no existe, rechaza el pedido: el usuario no está autenticado.
+2. Recalcula $h' = H(\text{parámetros recibidos})$ y verifica que $D_{K_C^+}(sig) = h'$. Si coincide, tiene **integridad y autenticación**.
+3. **Anti-replay.** Rechaza el pedido si `ts` cae fuera de una ventana, por ejemplo ±5 min, o si el `nonce` ya se usó dentro de esa ventana. Si lo acepta, guarda el nonce.
+4. **Guarda el pedido junto con su firma.** Esa es la prueba de **no repudio**: un tercero puede verificar con $K_C^+$ que solo el dueño de $K_C^-$ pudo generarla.
+5. Responde el precio.
+
+**Por qué timestamp y nonce juntos.**
+- Con **solo nonce**, el servidor tendría que guardar todos los nonces para siempre.
+- Con **solo timestamp**, se podría repetir el pedido dentro de la ventana.
+
+Juntos, el `ts` acota la ventana y el servidor solo guarda los nonces de esos minutos.
+
 ## Ejercicio 5 — Arquitecturas *(armado)*
 
 Un **estacionamiento medido** de una ciudad tiene:
