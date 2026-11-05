@@ -14,6 +14,23 @@ De dónde sale cada ejercicio:
 
 Suponiendo que un registro A asignado al nombre de dominio `dc.uba.ar` tiene un valor de TTL de 3 días, y cambia la dirección IP de 157.92.27.128 a 157.92.27.200, ¿cuál será la respuesta de los *Resolvers* que tengan el registro en caché durante los 2 días posteriores al cambio?
 
+### Solución
+
+**Idea clave.** DNS no avisa a las cachés cuando un registro cambia. Un resolver que tiene el registro A de `dc.uba.ar` en caché lo considera válido hasta que se le vence el TTL. Mientras tanto responde desde la caché y **no vuelve a consultar** al servidor autoritativo de `uba.ar`.
+
+**Qué responden.** Los resolvers que tienen el registro en caché responden la **IP vieja, 157.92.27.128**, como respuesta **no autoritativa**, porque sale de su caché y no del servidor de la zona. Lo hacen durante el TTL que les queda.
+
+**Cuánto dura.** Depende de cuándo cacheó el registro cada resolver. El TTL que le queda a cada uno está entre 0 y 3 días:
+
+| TTL restante al momento del cambio | Respuesta durante los 2 días siguientes |
+|---|---|
+| ≥ 2 días (lo cacheó hace ≤ 1 día) | La IP vieja **los 2 días completos** |
+| t < 2 días | La IP vieja hasta que pasa t. Después se le vence el registro y en la próxima consulta resuelve de nuevo en forma iterativa (raíz → `.ar` → `uba.ar`). Desde ahí responde la **nueva, 157.92.27.200** |
+
+En el peor caso, un resolver que lo cacheó justo antes del cambio sigue respondiendo la IP vieja hasta 3 días después del cambio. Un resolver que **no** tenía el registro en caché consulta en ese momento y obtiene la nueva directamente.
+
+**Consecuencia práctica.** Durante ese tiempo los clientes que usan esos resolvers van a la IP vieja, y si el servidor ya no está ahí, no llegan. Por eso, antes de cambiar una IP, conviene **bajar el TTL** con anticipación, por ejemplo a unos minutos, al menos 3 días antes, que es el TTL viejo. Después del cambio se lo vuelve a subir. Otra opción es mantener el servidor viejo andando hasta que vencen las cachés.
+
 ## Ejercicio 2 — HTTP *(19/06/2024, ej 4)*
 
 Explicar las diferencias entre los mensajes GET y POST de HTTP. Mostrar un ejemplo de cada tipo de mensaje.
