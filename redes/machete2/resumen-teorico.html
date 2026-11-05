@@ -333,5 +333,55 @@ p3:                f = max(0, 2) + 1 = 3     (gana la marca del mensaje)</pre>
   <li>Control de flujo vs control de congestión. ¿Por qué RED evita la sincronización global?</li>
 </ol>
 
+<!-- ============================================================ -->
+<h2>9. Respuestas</h2>
+
+<ol>
+  <li><b>Firma vs doble gasto.</b> Una firma prueba <b>quién</b> emitió una transacción y que no fue alterada, pero no dice nada del <b>orden</b>: Alice puede firmar tx₁ (moneda #42 → Bob) y tx₂ (#42 → Carol), y las dos firmas verifican. Falta acordar cuál fue primero y que todos vean el mismo historial. Blockchain agrega eso: un registro <b>append-only replicado</b>, con bloques encadenados por hash (inmutabilidad) y un mecanismo de <b>consenso</b> (PoW) que define un único orden sin un tercero de confianza. "La firma responde quién; el consenso, cuál primero."</li>
+
+  <li><b>PoW vs Sybil y el 51 %.</b> En una red abierta crear identidades es gratis, así que con "un nodo, un voto" un atacante inventa mil nodos y gana la votación (Sybil). PoW hace que el voto cueste un recurso <b>escaso y verificable</b>, el cómputo: cada bloque exige encontrar un nonce con hash &lt; target (caro de producir, barato de verificar), y gana la cadena con más trabajo acumulado. Crear identidades no da más poder; solo da más poder tener más cómputo. Con <b>≥ 50 %</b> del cómputo, el atacante genera bloques más rápido que el resto y puede reescribir la historia (doble gasto). Con menos del 50 %, su chance de alcanzar a los honestos cae exponencialmente con la cantidad de confirmaciones.</li>
+
+  <li><b>Cuándo no conviene una blockchain.</b> Cuando hay un <b>tercero en el que todos confían</b> (un banco, una empresa, el Estado), o cuando escriben pocos y se conocen. En esos casos una <b>base de datos replicada</b> (o un consenso BFT entre nodos conocidos) es más simple, más rápida (Bitcoin hace ~7 tx/s), más barata y no gasta energía en PoW. Blockchain se justifica solo si muchos escriben, no confían entre sí, no hay un tercero aceptable para todos y el historial tiene que ser verificable públicamente.</li>
+
+  <li><b>AH vs ESP; firma y confidencialidad.</b> En IPsec, <b>AH</b> (Authentication Header) da integridad, autenticación y no repudio del paquete, pero <b>no cifra</b>. <b>ESP</b> (Encapsulating Security Payload) da <b>confidencialidad</b> (cifra el payload). Una firma <b>no da confidencialidad</b>: se hace con la privada del emisor y se verifica con su pública, que tiene cualquiera, así que cualquiera puede leer el mensaje. Para confidencialidad hay que cifrar con la pública del receptor (o con una simétrica de sesión).</li>
+
+  <li><b>Kerckhoffs, largo de clave y one-time pad.</b> Kerckhoffs: el <b>algoritmo es público</b> y solo la <b>clave</b> es secreta. La seguridad por oscuridad falla, porque el algoritmo termina filtrándose, y uno público además está auditado. Como todo el secreto está en la clave, su longitud define el <b>factor de trabajo</b> del atacante, que crece <b>exponencialmente</b> con los bits: 64 bits se rompe por fuerza bruta, 128/256 es lo comercial. El one-time pad (clave aleatoria tan larga como el mensaje, XOR, usada una sola vez) es <b>inviolable</b> (Shannon), pero no se usa porque hay que <b>distribuir y proteger</b> una clave tan grande como todos los datos, por un canal seguro: si tenés ese canal, mandá el mensaje por ahí.</li>
+
+  <li><b>Ataque por reflexión.</b> En el challenge-response simplificado (cada uno manda su identidad y su desafío de entrada), T se hace pasar por A: abre una sesión con B y recibe el desafío R<sub>B</sub>. Como no puede cifrarlo, abre una <b>segunda sesión</b> con B mandándole el mismo R<sub>B</sub> como su desafío. B responde K<sub>AB</sub>(R<sub>B</sub>), y T usa esa respuesta en la primera sesión: B queda convencido de que habla con A. Reglas de diseño que lo evitan (dos de estas):
+    <ul>
+      <li>el que inicia prueba su identidad primero;</li>
+      <li>usar <b>claves distintas por sentido</b> (K<sub>AB</sub> y K′<sub>AB</sub>), así la respuesta de B no sirve como respuesta de A;</li>
+      <li>tomar los desafíos de <b>conjuntos distintos</b> (pares el que inicia, impares el que responde);</li>
+      <li>resistir sesiones paralelas.</li>
+    </ul></li>
+
+  <li><b>Lamport y vectoriales.</b> Si <b>a → b</b>, entonces <b>C(a) &lt; C(b)</b> (lo garantizan las reglas: +1 por evento y max + 1 al recibir). Pero si C(a) &lt; C(b) <b>no</b> se puede concluir nada: a puede haber ocurrido antes que b, o pueden ser concurrentes. Ejemplo de clase: C(c) = 1 &lt; C(b) = 2 con c y b concurrentes. Los <b>relojes vectoriales</b> lo resuelven: cada proceso lleva un contador por proceso, y al recibir toma el máximo componente a componente. Ahí vale el <b>si y solo si</b>: a → b ⇔ V(a) &lt; V(b) (todas las componentes ≤ y alguna &lt;). Si ningún vector es ≤ al otro, son concurrentes. El costo es mandar n enteros por mensaje.</li>
+
+  <li><b>Commit wait.</b> Al hacer commit, Spanner elige como timestamp <span class="f">s = TT.now().latest</span> y <b>espera</b>, sin liberar locks ni responder, hasta que <span class="f">TT.after(s)</span> sea verdadero, es decir, hasta que s ya pasó con seguridad en tiempo real. Cuesta <b>≈ 2ε</b> por commit, unos pocos ms (ε ≈ 1–7 ms), en parte superpuesto con la ronda de Paxos. Garantiza <b>consistencia externa</b>: si T1 termina antes de que empiece T2 en tiempo real, aunque sea en otro nodo y sin mensajes entre ellas, entonces s₁ &lt; s₂. Lamport no puede: solo ordena eventos relacionados por mensajes (causalidad que viaja), y dos transacciones conectadas solo por un cliente externo pueden quedar en cualquier orden.</li>
+
+  <li><b>CAP vs PACELC.</b> CAP dice que <b>ante una partición</b> hay que elegir entre consistencia (linealizable) y disponibilidad. Pero las particiones son <b>raras</b>. PACELC agrega el caso normal: <b>si no hay partición (Else)</b>, igual hay que elegir entre <b>latencia y consistencia</b>, porque la consistencia fuerte exige coordinar réplicas (esperar mayorías, consenso), y eso cuesta tiempo en <b>cada operación</b>. Por eso la latencia importa más: es un costo <b>permanente</b>, no solo cuando algo falla.</li>
+
+  <li><b>Réplicas y quórums.</b> Para tolerar f fallas por crash hacen falta <b>n ≥ 2f + 1</b> (Paxos, Raft): con f caídos quedan f + 1, que es mayoría, y dos mayorías siempre se intersectan, así que siempre hay un testigo de la última decisión. Para f fallas <b>bizantinas</b> hacen falta <b>n ≥ 3f + 1</b> (PBFT): además de los f que pueden no responder, otros f pueden mentir, y la intersección de dos quórums tiene que tener al menos un nodo honesto. <b>R + W &gt; N</b>: si escribís en W réplicas y leés de R, los dos conjuntos se solapan en al menos una réplica, así que <b>toda lectura ve la última escritura</b>. Ejemplo: N = 3, W = 2, R = 2 tolera una caída.</li>
+
+  <li><b>Tres motivos para el edge</b> (cualquiera de estos cuatro):
+    <ul>
+      <li><b>Latencia:</b> un auto autónomo tiene que frenar en milisegundos, y no puede esperar 50–150 ms de ida y vuelta a la nube.</li>
+      <li><b>Ancho de banda:</b> 1000 cámaras × 4 Mb/s = 4 Gb/s. Conviene procesar el video en el edge y subir solo eventos o resúmenes.</li>
+      <li><b>Autonomía:</b> una estación de bicis o una fábrica tiene que seguir funcionando si se corta el enlace a la nube.</li>
+      <li><b>Soberanía y privacidad:</b> los datos médicos o de pasajeros que, por ley, no pueden salir del hospital o del país.</li>
+    </ul></li>
+
+  <li><b>Amdahl con p = 0,9.</b> S(n) = 1 / ((1 − p) + p/n) → 1 / (1 − p) = 1 / 0,1 = <b>10×</b> como máximo, con cualquier cantidad de máquinas. El 10 % secuencial (coordinación, locks, consenso) es el que limita.</li>
+
+  <li><b>HTTP sin estado y CDN.</b> HTTP es <b>sin estado</b>: el servidor no recuerda pedidos anteriores. Es una decisión de diseño, porque los protocolos con estado son complicados: si el cliente o el servidor se caen, sus visiones del estado quedan inconsistentes y hay que reconstruirlas. Además escala mejor (cualquier réplica atiende cualquier pedido). El estado se agrega <b>afuera del protocolo</b>:
+    <ul>
+      <li><b>cookies</b>: <span class="f">Set-Cookie</span> en la respuesta, <span class="f">Cookie</span> en los pedidos siguientes, un archivo en el navegador y una base de datos en el sitio indexada por ese ID;</li>
+      <li>o credenciales en <b>cada</b> pedido (<span class="f">Authorization</span>; si faltan, 401).</li>
+    </ul>
+    Una <b>CDN</b> reparte usuarios por <b>redirección DNS</b>: el DNS autoritativo de la CDN responde con la IP del servidor más cercano, en geografía o en latencia, según desde dónde pregunta el resolver. Así cada usuario baja el contenido de una caché cercana, dentro o al lado de su ISP.</li>
+
+  <li><b>Flujo vs congestión; RED.</b> El <b>control de flujo</b> protege al <b>receptor</b>: es punto a punto, el receptor anuncia cuánto espacio libre tiene (RWND) y el emisor no lo desborda. El <b>control de congestión</b> protege a la <b>red</b>: es global, y el emisor estima cuánto aguanta la red (CWND) a partir de pérdidas y ACKs. Se envía <span class="f">min(CWND, RWND)</span>. Con <b>Drop Tail</b>, cuando la cola se llena se descartan los paquetes de <b>todos</b> los flujos a la vez: todos bajan su ventana juntos, la red queda subutilizada, todos vuelven a subir juntos y se repite (<b>sincronización global</b>). <b>RED</b> descarta <b>temprano y al azar</b>: cuando el promedio de la cola pasa MinTh, descarta cada paquete con probabilidad creciente. Así frena a <b>algunos</b> flujos por vez, en momentos distintos, y la cola se mantiene corta sin que todos reaccionen juntos.</li>
+</ol>
+
 </body>
 </html>
