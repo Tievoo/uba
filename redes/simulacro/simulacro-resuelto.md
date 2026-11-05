@@ -1,6 +1,6 @@
-# Simulacro resuelto (ej 1–5)
+# Simulacro resuelto (ej 1–6)
 
-Armado a partir de lo que respondiste y de las correcciones del chat. El 6 lo hacés vos.
+Armado a partir de lo que respondiste y de las correcciones del chat.
 
 ---
 
@@ -160,3 +160,36 @@ No se usa un mapa en vivo con pub/sub hacia la app: la consigna pide que el **se
 - Al sincronizar, el controlador manda los eventos encolados. El servidor **cierra el viaje con el timestamp del controlador**, no con la hora de llegada del mensaje, para no cobrar de más, y actualiza la disponibilidad.
 - Es **consistencia eventual**: mientras dura la partición el sistema elige **disponibilidad** (se puede devolver) en lugar de consistencia (CAP), y cuando cesa la partición las réplicas convergen.
 - Un detalle: el timestamp depende del reloj de la estación, que puede derivar. Se sincroniza con NTP cuando hay conexión, y unos segundos de error no importan para cobrar.
+
+---
+
+## Ejercicio 6 (opcional) — Clave simétrica vs clave pública
+
+**Clave simétrica** (AES, 3DES): la **misma clave** cifra y descifra, `P = D_K(E_K(P))`.
+- **Ventaja:** es **muy rápida**, así que sirve para cifrar grandes volúmenes de datos.
+- **Problema 1, la distribución:** las dos partes tienen que compartir la clave **antes** de comunicarse, por un canal seguro. Con N usuarios se necesita una clave por par: `N(N−1)/2` claves.
+- **Problema 2, el riesgo:** si alguien obtiene la clave, puede **leer y también fabricar** mensajes válidos.
+- **No da no repudio:** las dos partes tienen la misma clave, así que cualquiera de las dos pudo generar un mensaje (lo mismo pasa con un MAC).
+
+**Clave pública / asimétrica** (RSA, Diffie-Hellman): cada participante tiene un **par**. La **pública** la conoce todo el mundo; la **privada** la tiene solo el dueño y nunca se transmite. Es inviable calcular la privada a partir de la pública. Lo que cifra una, lo descifra la otra: `K−(K+(m)) = m = K+(K−(m))`.
+- **Cifrar con la pública de B** (`K+B`): solo B lo descifra, con su privada ⇒ **confidencialidad**.
+- **Firmar con la privada de A**, `F = E_{K−A}(H(M))`: cualquiera lo verifica con `K+A` y solo A pudo generarlo ⇒ **autenticación, integridad y no repudio**.
+- Regla práctica: **mi privada = probar que soy yo; pública del otro = que solo él lea**.
+- **Resuelve la distribución:** no hace falta un secreto compartido previo. Cada usuario publica una sola clave, o sea N pares en total contra `N(N−1)/2`.
+- **Desventaja:** es **mucho más lenta** que la simétrica, así que no conviene cifrar mensajes largos con ella (por eso se firma el hash y no el mensaje entero).
+
+**En la práctica se combinan (esquema híbrido, como en TLS):**
+1. La asimétrica **autentica**: el servidor presenta su certificado y la firma prueba que tiene la privada.
+2. La asimétrica **acuerda una clave de sesión simétrica**: el cliente manda la PMS cifrada con la pública del servidor, y de ahí los dos derivan las claves de sesión.
+3. Todos los datos viajan con la **simétrica** (AES), que es rápida.
+
+Queda un problema: ¿cómo sé que una pública es realmente de quien dice ser? Sin eso hay MITM. Lo resuelven los **certificados digitales** firmados por una CA.
+
+| | Simétrica | Pública |
+|---|---|---|
+| Claves | una compartida | par pública/privada por usuario |
+| Velocidad | rápida | lenta |
+| Distribución | difícil: secreto previo, `N(N−1)/2` claves | fácil: se publica, N pares |
+| Da | confidencialidad (e integridad con MAC) | confidencialidad (con K+ del otro), **autenticación y no repudio** (firma con K− propia) |
+| No repudio | no | sí |
+| Uso típico | cifrar los datos de la sesión | autenticar y acordar la clave de sesión |
