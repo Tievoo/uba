@@ -15,7 +15,7 @@ La materia tiene **4 temas**. Cada uno tiene una teórica, una práctica, una gu
 2. `02-semaforos.md` → práctica 2 + labo 1 (**prioridad alta**).
 3. `03-monitores.md` → apunte de la práctica 3 (**prioridad alta**; está escrito como una clase y se lee muy bien).
 4. `04-estructuras.md` → práctica 4 + teóricas 4 y 5.
-5. `05-haskell-minimo.md` → warm-up (`guias/guia5-warmup.hs`) → `05-stm.md` → Guía 5.
+5. `05-haskell-minimo.md` → warm-up (`guias/guia5/guia5-warmup.hs`) → `05-stm.md` → Guía 5.
 6. `../patrones-parcial.md` → el "machete" para ejercitar con el simulacro.
 
 ## Idea general de la materia, en un párrafo

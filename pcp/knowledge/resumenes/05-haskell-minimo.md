@@ -23,7 +23,7 @@ Adentro de ghci:
 | `:q` | salir |
 | `longitud [1,2,3]` | evalúa y muestra el resultado |
 
-Flujo de trabajo: editás `guias/guia5-warmup.hs` en VS Code, en ghci hacés `:r` y probás.
+Flujo de trabajo: editás `guias/guia5/guia5-warmup.hs` en VS Code, en ghci hacés `:r` y probás.
 
 ---
 
@@ -238,4 +238,4 @@ Ordenado por cuánto lo vas a necesitar en la Guía 5:
 | 8a, 9 | Sí | IO y la idea de "receta" |
 | 2, 3, 6, 5a/c, 7c, 8b, 10 | Opcional | no aparecen en la Guía 5 |
 
-El esqueleto con las firmas está en `guias/guia5-warmup.hs`.
+El esqueleto con las firmas está en `guias/guia5/guia5-warmup.hs`.
