@@ -8,7 +8,10 @@ La materia tiene **4 temas**. Cada uno tiene una teórica, una práctica, una gu
 | 2 | Semáforos | 02-Semaforos | practica-clase-02 | Guía 2 | Labo 1 | Ej 2 |
 | 3 | Monitores | 03-Monitores | clase-3-apunte | Guía 3 | — | Ej 3 |
 | 4 | Estructuras concurrentes y lock-free | 04-Listas, 05-colas | clase-04 | Guía 4 | Labo 3 | Ej 4 |
-| 5 | Memoria transaccional (STM, en Haskell) | 06-stm | clase-5-apunte | Guía 5 (+ warm-up de Haskell) | — | ? |
+| 5 | Memoria transaccional (STM, en Haskell) → `05-stm.md` | 06-stm | clase-05-apunte-stm | Guía 5 (+ warm-up de Haskell) | — | 2do parcial |
+| 6 | Mensajes y canales (Go) → `06-mensajes.md` | 07-mensajes | clase-06-mensajes | Guía 6 | Labo Go | 2do parcial |
+| 7 | LTS y lógica temporal (LTL) → `07-logicas.md` | 09-LTS-logicas | clase-07-apunte-logicas | Guía 7 | — | 2do parcial |
+| 8 | Paralelismo fork-join (work/span) → `08-paralelismo.md` | 10-paralelismo | — | Guía 8 | — | 2do parcial |
 
 ## Orden de lectura sugerido
 1. `01-exclusion-mutua.md` → después, la práctica 1 completa.

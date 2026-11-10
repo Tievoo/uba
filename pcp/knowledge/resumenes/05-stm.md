@@ -139,13 +139,67 @@ transferir de a n = do
 | `while (true) { ... }` del thread | función recursiva sin caso base, o `forever` |
 | `join` | `wait` |
 
-## 10. Patrones para la Guía 5
-- **Estado compartido:** primero preguntate qué tiene que compartirse. Cada cosa es una `TVar`. Se crean en `main` y se pasan por parámetro (no hay globales).
+## 10. Receta para encarar un ejercicio de STM ⭐
+1. **¿Qué se comparte?** Cada cosa compartida es una `TVar` (contador → `TVar Int`, buffer → `TVar (Maybe t)`, colección → `TVar [a]`, flag → `TVar Bool`). Si son varias, agrupalas en un `data`. Se crean en `main` con `newTVarIO` y se pasan por parámetro (no hay globales).
+2. **¿Qué operaciones hay?** Cada una es una función `... -> STM algo`. Adentro: leer, `check` la condición para poder seguir, escribir.
+3. **¿Cuándo tiene que esperar alguien?** Esa es tu condición de `check` (o la rama del `case` que hace `retry`). No escribas ningún signal.
+4. **¿Qué tiene que pasar todo junto?** Eso va en **un** `atomically`. Lo que es "aviso" y "espera" va en dos distintos (trampa 1).
+5. **¿Hay preferencias o prioridades?** `orElse`.
+6. **Threads:** cada participante es una función `IO ()` recursiva (o con `forever`) que hace `atomically (...)` y después la parte de IO (imprimir, `threadDelay` para simular que trabaja).
+7. **Justificá:** safety (atomicidad de cada transacción), no deadlock (no hay locks; chequear que nadie quede en `retry` para siempre), y aclarar que STM **no** garantiza ausencia de inanición.
+
+Formas de escribir "esperá hasta que...":
+
+```haskell
+-- con check: la condición para SEGUIR
+n <- readTVar v
+check (n > 0)
+
+-- con case + retry: cuando el valor tiene forma (Maybe, lista)
+m <- readTVar buf
+case m of
+  Nothing -> retry
+  Just x  -> do writeTVar buf Nothing; return x
+```
+
+Un thread que repite para siempre:
+
+```haskell
+consumidor :: TVar Int -> Int -> IO ()
+consumidor bolsa i = forever $ do
+  atomically (tomarPar bolsa)        -- la parte que sincroniza
+  putStrLn ("consumidor " ++ show i ++ " tomó un par")
+  threadDelay 100000                  -- simular que hace algo
+```
+
+## 11. Mapa de la Guía 5 (idea de cada ejercicio, no la solución)
+
+| Ej | Qué es | Herramienta clave | Ojo con |
+|---|---|---|---|
+| 1a | buffer de 1, no bloqueante | `case` sobre `Maybe`, devolver `Bool`/`Maybe` en vez de `retry` | — |
+| 1b | programa con put y get concurrentes | `async` + `wait`, `newTVarIO (Just 0)` | el buffer **arranca lleno**: pensá qué se imprime según quién corra primero |
+| 1c | buffer bloqueante | `retry` en el caso que no puede seguir | — |
+| 1d | `read` sin tomar | igual que `get` bloqueante pero sin escribir `Nothing` | — |
+| 2 | semáforo | `TVar Int`; `acquire` = `check (n > 0)` + decrementar | tomar **dos** permisos atómicamente sí se puede: dos `acquire` en el mismo `atomically` (a diferencia de la cátedra con semáforos posta) |
+| 3 | bolitas | invariante `bolitas <= generadores`: el generador hace `check (bolitas < generadores)`; el consumidor `check (bolitas >= 2)` | cantidad de jugadores no fija: los generadores **entran y salen** (contador en `TVar`), y al salir no pueden romper el invariante |
+| 4 | fumadores | mesa como `TVar` con los ingredientes; cada fumador hace `check` de que están los dos que le faltan | el proveedor tiene que esperar a que la mesa se vacíe antes de poner más |
+| 5 | pizzería | `tomarGrande \`orElse\` tomarDosChicas` | las dos chicas se toman **en la misma** transacción (si hay una sola, no se lleva ninguna) |
+| 6 | pila concurrente | `TVar [a]`; push = cons, pop = `retry` (o `Maybe`) si está vacía | — |
+| 7a | cola no acotada | `TVar [a]`; `desencolarSi` = versión con `Maybe` | encolar al final (`++ [x]`) |
+| 7b | mover entre colas | **composición**: `atomically (desencolar c1 >>= encolar c2)` | es el ejemplo de por qué las ops devuelven `STM` y no `IO` |
+| 7c | cola con prioridad | `orElse` encadenado: alta, si no media, si no baja | si las tres hacen `retry`, el thread duerme hasta que cambie cualquiera |
+| 8a | RWLock | lector: `check (not escritor)` + incrementar; escritor: `check (not escritor && lectores == 0)` + marcar | liberar es simplemente escribir; no hay signal |
+| 8b | RWLock con máximo de lectores | agregar el máximo al estado; `check (lectores < max)` | el máximo se fija al crear: va en el `data` (cambia `newRWLock`) |
+| 9 | filósofos | tenedores como buffers/`TVar Bool`; tomar **los dos** en la misma transacción | no hay deadlock (es atómico), pero mencioná que puede haber inanición |
+
+## 12. Patrones para la Guía 5 (resumen)
 - **Buffer de 1 lugar** (Ej 1): `TVar (Maybe t)`. `Nothing` = vacío, `Just x` = lleno. Versión no bloqueante: devuelve `Bool`/`Maybe`. Versión bloqueante: `case` sobre el contenido + `retry` en el caso que no puede seguir.
 - **Semáforo** (Ej 2): `TVar Int` + el `acquire` de la tabla. Dos permisos atómicos: dos `acquire` dentro del mismo `atomically` (o un `check (n >= 2)`).
-- **Contador con tope / condición de invariante** (bolitas, Ej 3): `check` sobre la condición del invariante antes de modificar.
+- **Contador con tope / condición de invariante** (bolitas, Ej 3; RWLock, Ej 8): `check` sobre la condición del invariante antes de modificar.
+- **Tomar varias cosas juntas** (fumadores Ej 4, dos chicas Ej 5, filósofos Ej 9): todo en una transacción; si falta algo, `retry` y no se toma nada.
 - **Preferencias** (pizzería, Ej 5: grande o, si no, dos chicas): `orElse`.
 - **Prioridades** (cola con prioridad, Ej 7c): `orElse` encadenado, de mayor a menor prioridad. Si todas hacen `retry`, el thread duerme.
+- **Composición** (Ej 7b): combinar operaciones `STM` existentes en un `do` y poner un solo `atomically` afuera.
 - **Esqueleto de un programa:**
   ```haskell
   import Control.Concurrent
