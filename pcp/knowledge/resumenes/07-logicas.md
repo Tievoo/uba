@@ -225,6 +225,7 @@ Con proposiciones de estado `wait_i` / `try_i` (el thread i quiere entrar), `cri
 Resultado clave: **toda ejecución justa termina metida en una componente terminal y la recorre entera, infinitas veces.**
 
 Reglas prácticas:
+
 | Fórmula | Bajo fair choice vale sii... |
 |---|---|
 | `□◇p` | **toda** componente terminal alcanzable tiene algún estado con p |
