@@ -8,6 +8,7 @@ import common
 parser = argparse.ArgumentParser()
 
 parser.add_argument("--address", type=str, default="127.0.0.1", help="Direccion del servidor")
+parser.add_argument("--port", type=int, default=12002, help="Puerto del servidor")
 parser.add_argument("--file", type=str, default="tux.bmp", help="Archivo a enviar")
 parser.add_argument("--timeout", type=float, default=0.5, help="Timeout en segundos")
 parser.add_argument("--window-size", type=int, default=16, help="Tamaño de ventana")
@@ -18,32 +19,38 @@ chunks = common.split_file_in_chunks(args.file)
 
 total = len(chunks)
 last_chunk = len(chunks) - 1
-addr = (args.address, 12002)
+addr = (args.address, args.port)
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock.settimeout(args.timeout)
 print(f"enviando {os.path.basename(args.file)} en {total} frames")
 
 last_ack_recvd = -1
 last_frame_sent = -1
+sent = 0
 
 # los timers son tuplas (momento_de_procesamiento, secuencia_a_retransmitir)
 Timer = collections.namedtuple('Timer', ['when', 'sequence_number'])
 timers = []
 
 def send_chunk_and_add_timer(chunk_index):
+    global sent
     is_last = chunk_index == last_chunk
     frame = common.encode_slidingwindow_data_frame(is_last, chunk_index, chunks[chunk_index])
     sock.sendto(frame, addr)
+    sent += 1
     # Esperar al menos args.timeout segundos para retransmitir el frame
     timers.append(Timer(when=time.time() + args.timeout, sequence_number=chunk_index))
 
+start = time.perf_counter()
 while last_ack_recvd != last_chunk:
     # print(f"LAR = {last_ack_recvd}, LFS = {last_frame_sent}")
 
     # Paso 1: reenvío frames pendientes que no hayan recibido acknowledge
     while timers and timers[0].when <= time.time():
         (_, sequence_number) = timers.pop(0)
-        if sequence_number < last_ack_recvd:
+        # Corrección: en el original era `<`, lo que hacía que se retransmitiera
+        # innecesariamente el frame last_ack_recvd, que ya tiene ack
+        if sequence_number <= last_ack_recvd:
             # Desestimo el timer, el frame ya recibió acknowledgement
             continue
         print(f"Resending {sequence_number}")
@@ -66,9 +73,9 @@ while last_ack_recvd != last_chunk:
         last_ack_recvd = max(last_ack_recvd, sequence_number)
 
         # print(f"Got ack for {sequence_number}, LAR={last_ack_recvd}")
-    except socket.timeout:
+    except (socket.timeout, ConnectionResetError):
         print('Got timeout')
 
-print("transferencia terminada")
+elapsed = time.perf_counter() - start
+print(f"transferencia terminada en {elapsed:.4f} s ({sent} frames enviados, {sent - total} retransmisiones)")
 sock.close()
-

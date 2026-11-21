@@ -1,0 +1,225 @@
+{
+  "2.1_dumb_loss1%": [
+    {
+      "tiempo": 0.0165,
+      "enviados": null,
+      "retransmisiones": null,
+      "identico": false,
+      "bytes_original": 332978,
+      "bytes_recibido": 329394,
+      "chunks_distintos": 1111,
+      "colgado": false,
+      "servidor_colgado": false,
+      "canal": null
+    },
+    {
+      "tiempo": 0.0163,
+      "enviados": null,
+      "retransmisiones": null,
+      "identico": false,
+      "bytes_original": 332978,
+      "bytes_recibido": 330162,
+      "chunks_distintos": 1022,
+      "colgado": false,
+      "servidor_colgado": false,
+      "canal": null
+    },
+    {
+      "tiempo": 0.0164,
+      "enviados": null,
+      "retransmisiones": null,
+      "identico": false,
+      "bytes_original": 332978,
+      "bytes_recibido": 330162,
+      "chunks_distintos": 955,
+      "colgado": false,
+      "servidor_colgado": false,
+      "canal": null
+    }
+  ],
+  "2.1d_dumb_sin_perdidas": {
+    "tiempo": 0.0163,
+    "enviados": null,
+    "retransmisiones": null,
+    "identico": true,
+    "bytes_original": 332978,
+    "bytes_recibido": 332978,
+    "chunks_distintos": 0,
+    "colgado": false,
+    "servidor_colgado": false,
+    "canal": null
+  },
+  "2.1d_dumb_reordenamiento": {
+    "tiempo": 0.0143,
+    "enviados": null,
+    "retransmisiones": null,
+    "identico": false,
+    "bytes_original": 332978,
+    "bytes_recibido": 329906,
+    "chunks_distintos": 1116,
+    "colgado": false,
+    "servidor_colgado": false,
+    "canal": {
+      "fwd": {
+        "recibidos": 1301,
+        "perdidos": 0,
+        "demorados": 18
+      },
+      "rev": {
+        "recibidos": 0,
+        "perdidos": 0,
+        "demorados": 0
+      }
+    }
+  },
+  "2.2a_saw_original_loss1%": [
+    {
+      "tiempo": 16.973,
+      "enviados": 1334,
+      "retransmisiones": 33,
+      "identico": false,
+      "bytes_original": 332978,
+      "bytes_recibido": 337586,
+      "chunks_distintos": 1148,
+      "colgado": false,
+      "servidor_colgado": false,
+      "canal": null
+    },
+    {
+      "tiempo": 13.4057,
+      "enviados": 1327,
+      "retransmisiones": 26,
+      "identico": false,
+      "bytes_original": 332978,
+      "bytes_recibido": 335794,
+      "chunks_distintos": 855,
+      "colgado": false,
+      "servidor_colgado": false,
+      "canal": null
+    },
+    {
+      "tiempo": 13.9207,
+      "enviados": 1328,
+      "retransmisiones": 27,
+      "identico": false,
+      "bytes_original": 332978,
+      "bytes_recibido": 336050,
+      "chunks_distintos": 1075,
+      "colgado": false,
+      "servidor_colgado": false,
+      "canal": null
+    }
+  ],
+  "2.2a_saw_original_sin_perdidas": {
+    "tiempo": 0.0942,
+    "enviados": 1301,
+    "retransmisiones": 0,
+    "identico": true,
+    "bytes_original": 332978,
+    "bytes_recibido": 332978,
+    "chunks_distintos": 0,
+    "colgado": false,
+    "servidor_colgado": false,
+    "canal": null
+  },
+  "2.2c_saw_modificado_loss1%": [
+    {
+      "tiempo": 16.9763,
+      "enviados": 1334,
+      "retransmisiones": 33,
+      "identico": true,
+      "bytes_original": 332978,
+      "bytes_recibido": 332978,
+      "chunks_distintos": 0,
+      "colgado": false,
+      "servidor_colgado": false,
+      "canal": null
+    },
+    {
+      "tiempo": 13.4067,
+      "enviados": 1327,
+      "retransmisiones": 26,
+      "identico": true,
+      "bytes_original": 332978,
+      "bytes_recibido": 332978,
+      "chunks_distintos": 0,
+      "colgado": false,
+      "servidor_colgado": false,
+      "canal": null
+    },
+    {
+      "tiempo": 13.9084,
+      "enviados": 1328,
+      "retransmisiones": 27,
+      "identico": true,
+      "bytes_original": 332978,
+      "bytes_recibido": 332978,
+      "chunks_distintos": 0,
+      "colgado": false,
+      "servidor_colgado": false,
+      "canal": null
+    }
+  ],
+  "2.2c_saw_modificado_loss10%": {
+    "tiempo": null,
+    "enviados": null,
+    "retransmisiones": null,
+    "identico": false,
+    "bytes_original": 332978,
+    "bytes_recibido": 167424,
+    "chunks_distintos": 647,
+    "colgado": true,
+    "servidor_colgado": false,
+    "canal": null
+  },
+  "2.3c_sw_loss1%": [
+    {
+      "tiempo": 6.6508,
+      "enviados": 1509,
+      "retransmisiones": 208,
+      "identico": true,
+      "bytes_original": 332978,
+      "bytes_recibido": 332978,
+      "chunks_distintos": 0,
+      "colgado": false,
+      "servidor_colgado": false,
+      "canal": null
+    },
+    {
+      "tiempo": 9.1761,
+      "enviados": 1589,
+      "retransmisiones": 288,
+      "identico": true,
+      "bytes_original": 332978,
+      "bytes_recibido": 332978,
+      "chunks_distintos": 0,
+      "colgado": false,
+      "servidor_colgado": false,
+      "canal": null
+    },
+    {
+      "tiempo": 7.6734,
+      "enviados": 1541,
+      "retransmisiones": 240,
+      "identico": true,
+      "bytes_original": 332978,
+      "bytes_recibido": 332978,
+      "chunks_distintos": 0,
+      "colgado": false,
+      "servidor_colgado": false,
+      "canal": null
+    }
+  ],
+  "2.3c_sw_loss10%": {
+    "tiempo": null,
+    "enviados": null,
+    "retransmisiones": null,
+    "identico": false,
+    "bytes_original": 332978,
+    "bytes_recibido": 92928,
+    "chunks_distintos": 938,
+    "colgado": true,
+    "servidor_colgado": false,
+    "canal": null
+  }
+}

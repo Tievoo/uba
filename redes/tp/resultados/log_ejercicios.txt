@@ -1,0 +1,3 @@
+2.1 dumb
+2.2a stop and wait original (sin número de secuencia)
+2.2c stop and wait con número de secuencia

@@ -1,149 +1,148 @@
-# Machete 2do parcial — borrador
+# Machete 2do parcial
 
 Para copiar a mano: 4 columnas de 32 renglones (frente izq/der, dorso izq/der), una por ejercicio del parcial.
-No repite nada de la hoja útil (API STM, helpers, sintaxis de canales, enunciado del teorema maestro).
-Borrador: se ajusta después del simulacro con los errores que aparezcan.
+No repite nada de la hoja útil (API STM, helpers, reglas y sintaxis de canales, enunciado del teorema maestro).
+Versión desarrollada (2026-11-16): menos ítems, más explicación; sin tabla de recurrencias (se saca con el maestro).
 
 ## Frente, columna izquierda — STM (ej 1)
 ```text
-# RECETA
-TVar por cosa compartida (data si son varias), newTVarIO en main
-op :: ... -> STM a = leer · check cond · escribir
-check = condición para SEGUIR · Maybe: case Nothing -> retry
-retry duerme hasta que cambie una TVar LEÍDA (no hay signal)
-orElse = preferencia / prioridad (encadenar de mayor a menor)
-componer: ops devuelven STM, el que las usa pone atomically
+# CÓMO ARMARLO
+Una TVar por cada cosa compartida; si son varias, un data con
+   todas adentro (data Centro = ...), creadas con newTVarIO.
+Cada operación es una función -> STM a: leer, chequear, escribir.
+Si no puedo seguir: retry. Duerme hasta que cambie alguna TVar
+   que LEÍ (no hay signal/notify, no hace falta avisar a nadie).
+check c = "sigo solo si vale c". Lista vacía: case [] -> retry.
+Preferencia: op1 `orElse` op2 (si op1 hace retry prueba op2; si
+   las dos, retry de todo). El orden ES la prioridad. Sirve
+   también para elegir entre dos lugares (dos centros, dos colas).
+Esperar a que OTRO haga algo conmigo: TVar Bool propia que viaja
+   en el pedido; el otro la pone True; yo hago check en OTRO
+   atomically (en el mismo, el retry deshace también mi pedido).
+Estado propio de un thread (racha, contador): TVar local creada
+   en ese thread, no va en el data compartido.
+IO (print, atender, threadDelay) SIEMPRE afuera: la transacción
+   devuelve el valor y el IO va después del atomically.
 # TRAMPAS
-avisar + esperar en el MISMO atomically = deadlock
-   (el retry deshace el aviso) -> dos atomically
-leer y escribir en atomically distintos = race
-nada de IO adentro: return valor, print afuera
-(-1) es un número: modifyTVar v (subtract 1)
-main no espera: async + mapM_ wait
-# PATRONES
-buffer 1: TVar (Maybe t), get TOMA (deja Nothing)
-no bloqueante -> devuelve Bool/Maybe · bloqueante -> retry
-semáforo: TVar Int · acq: check (n > 0); write (n-1)
-k permisos juntos: check (n >= k) en UNA transacción
-racha (3 urg -> 1 común): TVar Int por agente, if n<3 orElse
-tomar varias cosas: todo en 1 atomically, si falta -> retry
-esperar a que te atiendan: TVar Bool propia en la cola, el que
-   atiende la pone True; llamar hace check en OTRO atomically
-# ESQUELETO
-main = do e <- newTVarIO x0
-          hs <- mapM (\i -> async (th e i)) [1..n]
-          mapM_ wait hs
-th e i = do r <- atomically (op e); print r; th e i
-# JUSTIFICAR
-safety: transacción atómica y aislada (PL = commit)
-no deadlock: sin locks; chequear que nadie quede en retry
-NO garantiza ausencia de inanición (reintentos infinitos)
+leer en un atomically y escribir en otro = race (alguien se mete
+   en el medio). Lo que tiene que ser atómico va en UNO solo.
+cola llena / vacía -> retry, nunca busy-wait con un loop.
+main no espera a los threads: async + wait sobre cada uno.
+# JUSTIFICAR (lo piden siempre)
+race: cada operación es un atomically -> atómica y aislada; si
+   dos chocan, una aborta y reintenta. Invariante: en UNA sola.
+deadlock: no hay locks; solo puede trabarse alguien en retry.
+   Mostrar que lo que espera (lugar en la cola, que lo atiendan)
+   eventualmente pasa porque otro thread lo produce.
+starvation: SÍ puede. Una transacción se aborta si al commitear
+   otra cambió algo que leyó; si eso pasa siempre, no avanza
+   nunca. Y retry no es FIFO: despiertan todos y gana cualquiera.
+   Traza: A lee la cola, B commitea antes, A aborta, y así siempre
 ```
 
 ## Frente, columna derecha — Mensajes (ej 2)
 ```text
-# PLANTILLA
-cajitas = procesos, flechas = canales (quién crea / pasa)
-estado compartido -> vive en UN servidor (= lock gratis)
-struct por pedido · si espera algo: resp chan T adentro
-canal de resp POR cliente/pedido (compartido = se mezcla)
-orden entre tipos de pedido -> UN canal con campo tipo
-# GUARDAS CON NIL (canal nil = case apagado)
-(channel T) ent = nil; if puedo { ent = pedidos }
-select { case p = receive(ent): ...  case ...: ... }
-cola interna: out = nil; prim = nil
-   if len(cola) > 0 { out = salida; prim = cola[0] }
-   select { case x = receive(in): cola = append(cola, x)
-            case send(out, prim): cola = cola[1:] }
-valor del send calculado ANTES del select
-condición depende del pedido -> recibir y encolar pendientes
-# TIEMPO
-Sleep si no atiende nada más · Ticker+select si atiende otros
-After(t): timeout de una sola vez
-# PREFETCH: resp con buffer 1, pido el próximo al usar este
-# RECURSO CONTADO: chan buffer N precargado (tomar = receive,
-   liberar = send; un thread lo recarga con lo liberado)
-# N EN VUELO / ORDEN
-contador + nil en la entrada cuando llego a N
-cola FIFO de canales de resp privados, entrego la cabeza
-# PRIORIDAD: select{urg; default: select{urg; normal}}
+# CÓMO ARMARLO
+1. Diagrama: cajitas = procesos, flechas = canales. Se usa en la
+   justificación de deadlock: hacerlo SIEMPRE.
+2. Estado compartido -> vive en UN proceso servidor; sus datos
+   solo los toca él, así que no hay race.
+3. Pedido = struct. Si espera respuesta, lleva su PROPIO canal de
+   respuesta, creado por el cliente (uno compartido las mezcla).
+4. Servidor: for { select { un case por tipo de pedido } }
+# NO ATENDER UN TIPO DE PEDIDO POR AHORA: guarda con nil
+antes del select: in = pedidos; if no puedo { in = nil }
+   recibir de nil bloquea para siempre = ese case queda apagado.
+   Se reabre cuando otro case cambia el estado (ej: liberar).
+Si la condición depende del CONTENIDO del pedido: recibirlo igual,
+   guardarlo en una cola de pendientes y contestar más tarde.
+# RECURSO CONTADO (N lugares)
+canal con buffer N precargado: tomar = receive (bloquea si no
+   hay), liberar = send. O servidor con guarda nil.
+# TIEMPO: timestamp y calcular al consultar, o Ticker como case
 # TRAMPAS
-sends cruzados sincrónicos = deadlock -> buffer / process / select
-servidor nunca espera a un cliente (resp con buffer 1)
-select elige al azar: ni FIFO ni prioridad
-# NO DEADLOCK (justificar)
-servidor siempre vuelve a recibir · todo pedido aceptado
-se contesta · sin ciclos de espera · las guardas nil se reabren
+dos procesos que se hacen send mutuo sin buffer = deadlock.
+el servidor solo hace send a quien está esperando la respuesta;
+   si no, se traba el servidor entero.
+select elige al azar entre los listos: no es FIFO ni prioridad.
+# JUSTIFICAR NO DEADLOCK: por cada operación bloqueante
+a. ¿quién la destraba? (mi send lo completa el receive de otro)
+b. los servidores entre dos receives solo responden a quien está
+   esperando -> siempre vuelven al select.
+c. el diagrama no tiene ciclos de sends: los pedidos van al
+   servidor y las respuestas vuelven por el canal propio.
+d. guardas nil: mostrar que se reabren (ej: los lugares vuelven
+   porque todo hincha termina pagando y la barra libera).
 ```
 
 ## Dorso, columna izquierda — LTS / LTL (ej 3)
 ```text
-# LTS: estado = (pcs, locales, compartidas)
-1 paso por acción que lee/escribe algo compartido
-lo local se junta con el paso siguiente (aclararlo)
-asignación múltiple = 1 paso · await = paso si cond vale
-lock: var libre/tomado, lock() solo si libre
-sin buffer: send+recv = UN paso; bloqueado en send = sigue antes
-canal con buffer = LTS extra (vacío/lleno), in / out
-deadlock = estado NO final sin salidas · tryLock en loop: livelock
-mismos pcs con otra variable = OTRO estado
-# LTL: trazas infinitas (σ^ω)
-□◇p: p en el período · ◇□p: p en TODO el período
-p U q: q llega, p hasta antes · si q ahora -> true
-p W q = p U q ∨ □p (no obliga a que llegue q)
-X U ◇ψ ≡ ◇ψ · premisa falsa -> implicación true
-¬□¬a ≡ ◇a · ○ se rompe con pasos ajenos -> usar ◇
-precedencia: unarios > U, W > ∧, ∨ > →
-# PROPIEDADES
-mutex:      □¬(cs_0 ∧ cs_1)                safety
-inanición:  □(wait_i → ◇cs_i)  (wait_i: pc_i = w)  liveness
-q no antes que p: ¬q W p · alternar: W anidados
+# ARMAR EL LTS
+estado = (pc de cada proceso, variables compartidas). Mismo pc
+   con otra variable = OTRO estado.
+1 transición por acción que toca algo compartido; lo local se
+   pega al paso siguiente (aclararlo por escrito).
+canal sin buffer: send y receive = UNA acción compartida, los
+   dos avanzan juntos. Bloqueado en el send = sigue en pide.
+await / lock: la transición existe solo si vale la condición.
+Primero cada componente suelto, después la composición por BFS
+   desde el inicial. Revisar estados sin salida (= deadlock).
+Proposiciones: decir en qué estados vale cada una.
+Item LTL: escribirla y decir si es safety o liveness.
+# LTL
+□◇p: p infinitas veces · ◇□p: desde algún momento, p siempre.
+p U q: q llega y p vale hasta antes. p W q: igual pero q puede no
+   llegar nunca (□p alcanza). "no ... antes de", safety -> W.
+Chequear: el consecuente no puede ser falso en el mismo estado
+   de la premisa. □(p → ¬p W q) es FALSA apenas vale p.
 entre dos p hay q: □(p → p W (¬p W q))  (p dura varios estados)
-   □(p → ¬p W q) MAL: falsa apenas vale p
-safety: se rompe en prefijo finito · liveness: lazo ω
-# VERIFICAR SOBRE EL LTS
-safety: ESCRIBIR la traza inicial -> malo (no basta 'alcanzable')
-liveness: prefijo (lazo)^ω donde nunca se cumple
-ojo: la traza tiene que activar la premisa (wait_i)
-# FAIR CHOICE
-estado visitado ∞ veces -> toma TODAS sus salidas ∞ veces
-lazo injusto: pasa por s, nunca toma salida habilitada de s
-terminal = SCC sin flechas afuera; justa -> la recorre entera
-fair NO salva safety ni estados sin salidas
+no vuelve a pedir sin usar: □(espera → ¬pide W usa)
+○ = próximo paso del SISTEMA (puede ser de otro proceso).
+# VERIFICAR
+safety rota: ESCRIBIR la traza finita inicial -> estado malo.
+liveness rota: prefijo (lazo)^ω donde nunca vale lo pedido; la
+   traza tiene que activar la premisa.
+fair choice: un estado visitado ∞ veces toma TODAS sus salidas ∞
+   veces. Lazo injusto: pasa ∞ por s y nunca toma una salida
+   habilitada de s -> bajo fair la propiedad pasa a valer.
+fair NO salva safety ni estados sin salida.
+"vale sin fairness": mostrar que TODA traza infinita lo cumple
+   (ej: servidor en ciclo fijo; entre sus pasos solo hay finitos
+   pasos locales de los clientes).
 ```
 
 ## Dorso, columna derecha — Paralelismo (ej 4)
 ```text
 # FORK-JOIN
-RecursiveTask<T> devuelve · RecursiveAction escribe salida
-low = new X(.., lo, mid); low.fork();
-r = new X(.., mid+1, hi).compute(); l = low.join(); combinar
-fork todas menos 1, compute 1, join al final (no antes)
-   max(l.join(), r.compute()) MAL: args en orden = secuencial
-join sin resultado = esperar (si no, el padre termina antes)
-paralelas: escriben regiones disjuntas, leen lo que nadie toca
-pasar índices, no copiar (copiar = Θ(n) de work)
-# WORK / SPAN
-W = nodos totales (T1) · S = camino más largo (T∞)
-secuencial: W+W, S+S · paralelo: W+W, máx(S)
-W(n) = a·W(n/b) + f(n) · S(n) = S(n/b) + g(n) (1 copia)
-combinar entra al span con SU span (paralelo o no)
-work = span -> paralelismo Θ(1) (power: cadena)
-paralelismo = W / S · escribir recurrencia + caso base + Θ
-# MAESTRO: f vs n^(log_b a) (hojas) · caso 3: regularidad
-# SPAN: log n niveles × g(n) · g = n -> Θ(n) (geométrica)
-# TABLA
-2T(n/2)+1 = n          2T(n/2)+n = n log n
-2T(n/2)+log n = n      4T(n/2)+1 = n²      8T(n/2)+n² = n³
-T(n/2)+1 = log n       T(n/2)+log n = log² n
-T(n/2)+n = n           T(n−1)+1 = n
-2T(n/2)+n log n = n log² n (NO entra en el maestro de la hoja)
-mergesort: W n log n · S n (merge de la raíz) · par log n
+class X extends RecursiveTask<T> (devuelve) o RecursiveAction
+   (escribe en un arreglo de salida; ahí join = esperar).
+compute(): caso base; mid; izq = new X(A, lo, mid); izq.fork();
+   r = new X(A, mid, hi).compute(); l = izq.join(); combinar.
+fork se le hace a una TAREA nueva, no al resultado de llamar.
+join recién después del compute: max(l.join(), r.compute()) es
+   secuencial (Java evalúa los argumentos en orden).
+lo que no depende de las mitades (ej: cruza) va entre fork y join
+pasar índices, no copiar subarreglos (copiar suma Θ(n) de work).
+una sola llamada recursiva cuyo resultado necesito: nada que
+   forkear, W = S y paralelismo Θ(1).
+# WORK Y SPAN
+W (= T1) suma todo. S (= T∞) = camino más largo.
+W(n) = a·W(n/b) + WORK del combinar (se suman todas)
+S(n) = S(n/b) + SPAN del combinar (paralelo: cuenta UNA copia)
+Justificar: las mitades son independientes (leen rangos
+   disjuntos, no escriben nada compartido) -> paralelas; el
+   combinar usa las dos -> va después del join, entra al span.
+combinar secuencial: span = work (cruza, merge: Θ(n) -> S Θ(n)).
+   combinar en fork-join: span menor (suma de matrices Θ(log n)).
+Maestro (hoja útil): escribir a, b, n^(log_b a), f, caso y ε;
+   caso 3: chequear regularidad a·f(n/b) ≤ c·f(n) con c < 1.
+paralelismo = W/S = speedup máximo con infinitos procesadores.
 # COTAS
-T_P ≥ T1/P · T_P ≥ T∞ (cualquier scheduler)
-greedy: T_P ≤ T1/P + T∞ · ajustada: (T1 − T∞)/P + T∞
-comparar programas: T_P de cada uno, T∞ incógnitas,
-   una desigualdad por frase, despejar T∞' − T∞
-medido -> T1 ≤ P·T_P (la menor), T∞ ≤ T_P (la menor)
-   enchufar en la ajustada (creciente en T1 y T∞)
+T_P ≥ T1/P (work law) · T_P ≥ T∞ (span law)
+greedy: T_P ≤ T1/P + T∞ (≈ para estimar) · speedup = T1/T_P
+si P > W/S, agregar procesadores ya no ayuda (manda el span).
+concluir comparando W, S y W/S de cada variante, no solo T_P.
+comparar programas: una desigualdad por dato, despejar T∞' − T∞.
+de mediciones: T1 ≤ P·T_P, T∞ ≤ T_P (las menores) y enchufar en
+   (T1 − T∞)/P + T∞, que crece en T1 y en T∞.
 ```

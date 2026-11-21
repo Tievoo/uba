@@ -1,3 +1,4 @@
+import os
 import struct
 
 """
@@ -54,7 +55,9 @@ frames diferentes de longitud fija 64 bits con los siguientes contenidos:
 
 """
 
-CHUNK_SIZE = 256
+# Se puede sobreescribir con la variable de entorno CHUNK_SIZE (para los
+# experimentos del TP, sin tener que editar este archivo).
+CHUNK_SIZE = int(os.environ.get("CHUNK_SIZE", 256))
 
 def pad_to_chunk_size(data):
     """Cuando un chunk no tiene longitud máxima, le agrega bytes nulos al
